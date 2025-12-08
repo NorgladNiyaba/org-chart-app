@@ -31,6 +31,7 @@ function App() {
   const [managerIdColumn, setManagerIdColumn] = useState("");
 
   const [companyName, setCompanyName] = useState(""); // company name input
+  const [logoDataUrl, setLogoDataUrl] = useState(""); // company logo (base64)
   const [error, setError] = useState("");
 
   // Saved companies & active one
@@ -155,6 +156,37 @@ function App() {
     });
   };
 
+  // ---------- LOGO UPLOAD ----------
+
+  const handleLogoChange = (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    // Basic type guard – only images
+    if (!file.type.startsWith("image/")) {
+      setError("Please upload an image file for the logo (PNG, JPG, etc.).");
+      return;
+    }
+
+    setError("");
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result === "string") {
+        setLogoDataUrl(result);
+      }
+    };
+    reader.onerror = () => {
+      console.error("Failed to read logo file");
+      setError("Failed to read logo file.");
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const clearLogo = () => {
+    setLogoDataUrl("");
+  };
+
   // ---------- ORG TREE BUILDING ----------
 
   const rootNodes = useMemo(() => {
@@ -268,6 +300,7 @@ function App() {
         titleColumn,
         idColumn,
         managerIdColumn,
+        logoDataUrl, // save logo with mappings
       },
       updated_at: now,
     };
@@ -349,6 +382,7 @@ function App() {
       setTitleColumn(m.titleColumn || "");
       setIdColumn(m.idColumn || "");
       setManagerIdColumn(m.managerIdColumn || "");
+      setLogoDataUrl(m.logoDataUrl || ""); // restore logo if present
     } catch (e) {
       console.error(e);
       setError("Unexpected error while loading company.");
@@ -382,11 +416,22 @@ function App() {
     }
   };
 
-  // ---------- PDF EXPORT ----------
+  // ---------- PDF EXPORT (WITH LOGO) ----------
 
   const handleDownloadPDF = async () => {
     if (!chartRef.current) return;
     try {
+      // Prepare logo (if any)
+      let logoImg = null;
+      if (logoDataUrl) {
+        logoImg = await new Promise((resolve) => {
+          const img = new Image();
+          img.onload = () => resolve(img);
+          img.onerror = () => resolve(null);
+          img.src = logoDataUrl;
+        });
+      }
+
       const chartElement = chartRef.current;
       const canvas = await html2canvas(chartElement, {
         scale: 2, // better resolution
@@ -401,34 +446,65 @@ function App() {
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
 
-      // Header & footer layout
-      const topMargin = 60; // space for title
+      // Layout for header & footer
       const bottomMargin = 40; // space for footer
       const sideMargin = 40;
 
+      // --- HEADER (logo + title) ---
+      let headerTop = 20;
+      let headerBottom = headerTop;
+
+      // Logo: centered above title, coherent size
+      if (logoImg) {
+        const maxLogoWidth = 80;
+        const maxLogoHeight = 80;
+        const imgW = logoImg.width;
+        const imgH = logoImg.height;
+        const logoRatio = Math.min(maxLogoWidth / imgW, maxLogoHeight / imgH);
+        const logoDrawWidth = imgW * logoRatio;
+        const logoDrawHeight = imgH * logoRatio;
+
+        const logoX = (pageWidth - logoDrawWidth) / 2;
+        const logoY = headerTop;
+
+        pdf.addImage(
+          logoDataUrl,
+          "PNG",
+          logoX,
+          logoY,
+          logoDrawWidth,
+          logoDrawHeight
+        );
+
+        headerBottom = logoY + logoDrawHeight;
+      }
+
+      // Title text just under logo (or under headerTop if no logo)
+      const titleText = companyName
+        ? `${companyName} Organizational Chart`
+        : "Organizational Chart";
+
+      const titleY = headerBottom + 24;
+      pdf.setFontSize(18);
+      pdf.setFont("helvetica", "bold");
+      pdf.text(titleText, pageWidth / 2, titleY, { align: "center" });
+
+      const topMargin = titleY + 20; // chart starts under title
+
+      // --- CHART IMAGE ---
       const maxWidth = pageWidth - sideMargin * 2;
       const maxHeight = pageHeight - topMargin - bottomMargin;
 
       const imgWidth = canvas.width;
       const imgHeight = canvas.height;
-
       const ratio = Math.min(maxWidth / imgWidth, maxHeight / imgHeight);
 
       const printWidth = imgWidth * ratio;
       const printHeight = imgHeight * ratio;
 
       const x = (pageWidth - printWidth) / 2;
-      const y = topMargin; // start right under the title area
+      const y = topMargin;
 
-      // HEADER TEXT
-      const titleText = companyName
-        ? `${companyName} Organizational Chart`
-        : "Organizational Chart";
-      pdf.setFontSize(18);
-      pdf.setFont("helvetica", "bold");
-      pdf.text(titleText, pageWidth / 2, 35, { align: "center" });
-
-      // IMAGE (chart)
       pdf.addImage(imageData, "PNG", x, y, printWidth, printHeight);
 
       // FOOTER TEXT (fine print) – gray & subtle
@@ -455,10 +531,10 @@ function App() {
   return (
     <div className="app-container">
       <header className="app-header">
-        <h1>Org Chart Prototype (Phase 4)</h1>
+        <h1>Organizational Chart Generator</h1>
         <p>
           Upload and edit people data, map columns, generate an organizational chart, and save
-          companies centrally using Supabase. Then export charts as PDFs.
+          companies centrally using Supabase. Then export charts as branded PDFs.
         </p>
       </header>
 
@@ -518,21 +594,54 @@ function App() {
 
       {/* STEP 1 */}
       <section className="app-section">
-        <h2>1. Company info & CSV upload</h2>
+        <h2>1. Company info, logo & CSV upload</h2>
 
-        <div className="company-name-row">
-          <label htmlFor="companyName">Company name</label>
-          <input
-            id="companyName"
-            type="text"
-            value={companyName}
-            onChange={(e) => setCompanyName(e.target.value)}
-            placeholder="e.g. Acme Corp"
-          />
-          <p className="hint small">
-            This will appear as the title on the exported PDF (e.g. “Acme Corp Organizational
-            Chart”).
-          </p>
+        <div className="company-grid">
+          <div className="company-name-row">
+            <label htmlFor="companyName">Company name</label>
+            <input
+              id="companyName"
+              type="text"
+              value={companyName}
+              onChange={(e) => setCompanyName(e.target.value)}
+              placeholder="e.g. Acme Corp"
+            />
+            <p className="hint small">
+              This will appear as the title on the exported PDF (e.g. “Acme Corp Organizational
+              Chart”).
+            </p>
+          </div>
+
+          <div className="logo-row">
+            <label htmlFor="companyLogo">Company logo (optional)</label>
+            <input
+              id="companyLogo"
+              type="file"
+              accept="image/*"
+              onChange={handleLogoChange}
+            />
+            {logoDataUrl ? (
+              <div className="logo-preview-wrapper">
+                <img
+                  src={logoDataUrl}
+                  alt="Company logo preview"
+                  className="logo-preview"
+                />
+                <button
+                  type="button"
+                  className="text-btn"
+                  onClick={clearLogo}
+                >
+                  Remove logo
+                </button>
+              </div>
+            ) : (
+              <p className="hint small">
+                If provided, the logo will appear above the company name in the chart preview and
+                the exported PDF.
+              </p>
+            )}
+          </div>
         </div>
 
         <p className="hint">
@@ -697,11 +806,20 @@ function App() {
 
         {rootNodes.length > 0 && hasMappings && (
           <>
-            {companyName ? (
-              <h3 className="chart-title">{companyName} Organizational Chart</h3>
-            ) : (
-              <h3 className="chart-title">Organizational Chart</h3>
-            )}
+            <div className="chart-heading">
+              {logoDataUrl && (
+                <img
+                  src={logoDataUrl}
+                  alt="Company logo"
+                  className="chart-company-logo"
+                />
+              )}
+              {companyName ? (
+                <h3 className="chart-title">{companyName} Organizational Chart</h3>
+              ) : (
+                <h3 className="chart-title">Organizational Chart</h3>
+              )}
+            </div>
 
             <div className="chart-wrapper" ref={chartRef}>
               <div className="chart-container">

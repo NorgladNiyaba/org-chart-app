@@ -20,7 +20,7 @@ body {
 
 .app-header h1 {
   margin: 0 0 8px;
-  font-size: 1.8rem;
+  font-size: 1.9rem;
 }
 
 .app-header p {
@@ -101,17 +101,30 @@ body {
   gap: 8px;
 }
 
-/* Company name input */
+/* Company info & logo */
 
-.company-name-row {
+.company-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1.1fr);
+  gap: 16px;
+  align-items: flex-start;
+}
+
+@media (max-width: 768px) {
+  .company-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.company-name-row,
+.logo-row {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  max-width: 320px;
-  margin-bottom: 12px;
 }
 
-.company-name-row label {
+.company-name-row label,
+.logo-row label {
   font-size: 0.85rem;
   color: #374151;
 }
@@ -121,6 +134,27 @@ body {
   border-radius: 6px;
   border: 1px solid #d1d5db;
   font-size: 0.9rem;
+}
+
+.logo-row input[type="file"] {
+  margin-top: 4px;
+  font-size: 0.85rem;
+}
+
+.logo-preview-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.logo-preview {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  background: #f9fafb;
 }
 
 /* Mapping grid */
@@ -200,6 +234,20 @@ body {
 }
 
 /* Chart styles */
+
+.chart-heading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.chart-company-logo {
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+  margin-bottom: 6px;
+}
 
 .chart-title {
   margin: 0 0 8px;
@@ -322,6 +370,21 @@ body {
 
 .danger-btn:hover {
   background: #fecaca;
+}
+
+/* Text-like small action button */
+
+.text-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.8rem;
+  color: #2563eb;
+  cursor: pointer;
+}
+
+.text-btn:hover {
+  text-decoration: underline;
 }
 
 /* Actions row under chart */
