@@ -35,7 +35,7 @@ function App() {
   const [error, setError] = useState("");
 
   // Saved companies & active one
-  const [savedCompanies, setSavedCompanies] = useState([]); // [{id,name,...}]
+  const [savedCompanies, setSavedCompanies] = useState([]); // rows from org_companies
   const [activeCompanyId, setActiveCompanyId] = useState(null);
 
   const [isLoadingCompanies, setIsLoadingCompanies] = useState(false);
@@ -44,7 +44,7 @@ function App() {
 
   const chartRef = useRef(null);
 
-  // ---------- LOAD COMPANIES FROM SUPABASE ----------
+  // ---------- LOAD COMPANIES FROM SUPABASE ONCE ----------
 
   useEffect(() => {
     const fetchCompanies = async () => {
@@ -146,7 +146,7 @@ function App() {
         setIdColumn("");
         setManagerIdColumn("");
 
-        // New file => treat as unsaved draft until user hits Save
+        // Reset active company (this is now a draft until saved)
         setActiveCompanyId(null);
       },
       error: (err) => {
@@ -162,7 +162,6 @@ function App() {
     const file = event.target.files[0];
     if (!file) return;
 
-    // Basic type guard – only images
     if (!file.type.startsWith("image/")) {
       setError("Please upload an image file for the logo (PNG, JPG, etc.).");
       return;
@@ -195,7 +194,6 @@ function App() {
     }
 
     try {
-      // First create a map of id -> node
       const nodeMap = new Map();
 
       rawRows.forEach((row, index) => {
@@ -224,7 +222,6 @@ function App() {
         });
       });
 
-      // Then link children to parents
       const roots = [];
 
       nodeMap.forEach((node) => {
@@ -232,7 +229,6 @@ function App() {
           const parent = nodeMap.get(node.managerId);
           parent.children.push(node);
         } else {
-          // No manager or manager not found -> treat as root
           roots.push(node);
         }
       });
@@ -263,10 +259,7 @@ function App() {
       if (fieldType === "title") columnKey = titleColumn;
       if (fieldType === "manager") columnKey = managerIdColumn;
 
-      if (!columnKey) {
-        // column not mapped; nothing to update
-        return prev;
-      }
+      if (!columnKey) return prev;
 
       currentRow[columnKey] = value;
       next[rowIndex] = currentRow;
@@ -300,7 +293,7 @@ function App() {
         titleColumn,
         idColumn,
         managerIdColumn,
-        logoDataUrl, // save logo with mappings
+        logoDataUrl,
       },
       updated_at: now,
     };
@@ -338,7 +331,7 @@ function App() {
         result = data;
       }
 
-      // Refresh list
+      // Refresh list from Supabase (so savedCompanies is in sync)
       const { data: all, error: listError } = await supabase
         .from("org_companies")
         .select("*")
@@ -357,36 +350,26 @@ function App() {
     }
   };
 
-  const handleLoadCompany = async (companyId) => {
+  // 🔧 FIXED: Load from savedCompanies in memory instead of calling Supabase again
+  const handleLoadCompany = (companyId) => {
     setError("");
-    try {
-      const { data, error: dbError } = await supabase
-        .from("org_companies")
-        .select("*")
-        .eq("id", companyId)
-        .single();
-
-      if (dbError) {
-        console.error(dbError);
-        setError("Failed to load that company from the database.");
-        return;
-      }
-
-      setActiveCompanyId(data.id);
-      setCompanyName(data.name || "");
-      setRawRows(data.raw_rows || []);
-      setColumns(data.columns || []);
-
-      const m = data.mappings || {};
-      setNameColumn(m.nameColumn || "");
-      setTitleColumn(m.titleColumn || "");
-      setIdColumn(m.idColumn || "");
-      setManagerIdColumn(m.managerIdColumn || "");
-      setLogoDataUrl(m.logoDataUrl || ""); // restore logo if present
-    } catch (e) {
-      console.error(e);
-      setError("Unexpected error while loading company.");
+    const company = savedCompanies.find((c) => c.id === companyId);
+    if (!company) {
+      console.warn("Company not found for id", companyId);
+      return;
     }
+
+    setActiveCompanyId(company.id);
+    setCompanyName(company.name || "");
+    setRawRows(company.raw_rows || []);
+    setColumns(company.columns || []);
+
+    const m = company.mappings || {};
+    setNameColumn(m.nameColumn || "");
+    setTitleColumn(m.titleColumn || "");
+    setIdColumn(m.idColumn || "");
+    setManagerIdColumn(m.managerIdColumn || "");
+    setLogoDataUrl(m.logoDataUrl || "");
   };
 
   const handleDeleteCompany = async (companyId) => {
@@ -446,15 +429,13 @@ function App() {
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
 
-      // Layout for header & footer
-      const bottomMargin = 40; // space for footer
+      const bottomMargin = 40;
       const sideMargin = 40;
 
       // --- HEADER (logo + title) ---
       let headerTop = 20;
       let headerBottom = headerTop;
 
-      // Logo: centered above title, coherent size
       if (logoImg) {
         const maxLogoWidth = 80;
         const maxLogoHeight = 80;
@@ -479,7 +460,6 @@ function App() {
         headerBottom = logoY + logoDrawHeight;
       }
 
-      // Title text just under logo (or under headerTop if no logo)
       const titleText = companyName
         ? `${companyName} Organizational Chart`
         : "Organizational Chart";
@@ -489,7 +469,7 @@ function App() {
       pdf.setFont("helvetica", "bold");
       pdf.text(titleText, pageWidth / 2, titleY, { align: "center" });
 
-      const topMargin = titleY + 20; // chart starts under title
+      const topMargin = titleY + 20;
 
       // --- CHART IMAGE ---
       const maxWidth = pageWidth - sideMargin * 2;
@@ -507,17 +487,17 @@ function App() {
 
       pdf.addImage(imageData, "PNG", x, y, printWidth, printHeight);
 
-      // FOOTER TEXT (fine print) – gray & subtle
+      // FOOTER TEXT (fine print)
       pdf.setFontSize(8);
       pdf.setFont("helvetica", "normal");
-      pdf.setTextColor(130, 130, 130); // gray
+      pdf.setTextColor(130, 130, 130);
       pdf.text(
         "Powered by Sparing Consulting Inc.",
         pageWidth / 2,
         pageHeight - 18,
         { align: "center" }
       );
-      pdf.setTextColor(0, 0, 0); // reset to black
+      pdf.setTextColor(0, 0, 0);
 
       pdf.save("org-chart.pdf");
     } catch (e) {
