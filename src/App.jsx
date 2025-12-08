@@ -89,14 +89,11 @@ function App() {
       complete: (results) => {
         const { data, errors, meta } = results;
 
-        console.log("Papa parse results:", results); // helpful for debugging
-
         if (!data || data.length === 0) {
           setError("The CSV seems to be empty.");
           return;
         }
 
-        // Non-fatal issues (e.g. FieldMismatch) – log but don't block
         if (errors && errors.length > 0) {
           console.warn("PapaParse warnings:", errors);
         }
@@ -107,10 +104,7 @@ function App() {
             ? meta.fields
             : Object.keys(data[0]);
 
-        // SPECIAL FIX:
-        // If Papa thinks there's only one column and that column name contains commas
-        // (e.g. "ID,ManagerID,Name,Title"), then our file is actually "one big field per row"
-        // and we need to manually split it into real columns.
+        // SPECIAL FIX: combined header like "ID,ManagerID,Name,Title"
         if (
           finalColumns.length === 1 &&
           typeof finalColumns[0] === "string" &&
@@ -119,11 +113,8 @@ function App() {
           const combinedHeader = finalColumns[0];
           const headerParts = combinedHeader.split(",").map((h) => h.trim());
 
-          console.log("Detected combined header, splitting into:", headerParts);
-
           finalColumns = headerParts;
 
-          // Rebuild data rows: each row currently has a single key (combinedHeader)
           finalData = data.map((row) => {
             const onlyKey = combinedHeader;
             const rawValue = row[onlyKey] != null ? String(row[onlyKey]) : "";
@@ -140,13 +131,11 @@ function App() {
         setColumns(finalColumns);
         setRawRows(finalData);
 
-        // Reset mappings (we let the user re-map for this dataset)
         setNameColumn("");
         setTitleColumn("");
         setIdColumn("");
         setManagerIdColumn("");
 
-        // Reset active company (this is now a draft until saved)
         setActiveCompanyId(null);
       },
       error: (err) => {
@@ -248,7 +237,6 @@ function App() {
   // ---------- INLINE DATA EDITING ----------
 
   const handleCellChange = (rowIndex, fieldType, value) => {
-    // fieldType: 'id' | 'name' | 'title' | 'manager'
     setRawRows((prev) => {
       const next = [...prev];
       const currentRow = { ...next[rowIndex] };
@@ -286,7 +274,7 @@ function App() {
 
     const payload = {
       name: companyName.trim(),
-      raw_rows: rawRows,
+      raw_rows: rawRows, // expected supabase column name
       columns,
       mappings: {
         nameColumn,
@@ -301,7 +289,6 @@ function App() {
     try {
       let result;
       if (activeCompanyId) {
-        // Update existing row
         const { data, error: dbError } = await supabase
           .from("org_companies")
           .update(payload)
@@ -316,7 +303,6 @@ function App() {
         }
         result = data;
       } else {
-        // Insert new row
         const { data, error: dbError } = await supabase
           .from("org_companies")
           .insert([{ ...payload }])
@@ -331,7 +317,7 @@ function App() {
         result = data;
       }
 
-      // Refresh list from Supabase (so savedCompanies is in sync)
+      // Refresh list
       const { data: all, error: listError } = await supabase
         .from("org_companies")
         .select("*")
@@ -350,7 +336,7 @@ function App() {
     }
   };
 
-  // 🔧 FIXED: Load from savedCompanies in memory instead of calling Supabase again
+  // ⚙️ Load from in-memory savedCompanies, tolerating different field names
   const handleLoadCompany = (companyId) => {
     setError("");
     const company = savedCompanies.find((c) => c.id === companyId);
@@ -359,17 +345,30 @@ function App() {
       return;
     }
 
+    // Some users might have columns named raw_rows, rawRows, etc.
+    const loadedRows =
+      company.raw_rows ||
+      company.rawRows ||
+      company.rows ||
+      [];
+
+    const loadedColumns =
+      company.columns ||
+      company.cols ||
+      [];
+
+    const mappings = company.mappings || company.mapping || {};
+
     setActiveCompanyId(company.id);
     setCompanyName(company.name || "");
-    setRawRows(company.raw_rows || []);
-    setColumns(company.columns || []);
+    setRawRows(Array.isArray(loadedRows) ? loadedRows : []);
+    setColumns(Array.isArray(loadedColumns) ? loadedColumns : []);
 
-    const m = company.mappings || {};
-    setNameColumn(m.nameColumn || "");
-    setTitleColumn(m.titleColumn || "");
-    setIdColumn(m.idColumn || "");
-    setManagerIdColumn(m.managerIdColumn || "");
-    setLogoDataUrl(m.logoDataUrl || "");
+    setNameColumn(mappings.nameColumn || "");
+    setTitleColumn(mappings.titleColumn || "");
+    setIdColumn(mappings.idColumn || "");
+    setManagerIdColumn(mappings.managerIdColumn || "");
+    setLogoDataUrl(mappings.logoDataUrl || "");
   };
 
   const handleDeleteCompany = async (companyId) => {
@@ -404,7 +403,6 @@ function App() {
   const handleDownloadPDF = async () => {
     if (!chartRef.current) return;
     try {
-      // Prepare logo (if any)
       let logoImg = null;
       if (logoDataUrl) {
         logoImg = await new Promise((resolve) => {
@@ -417,7 +415,7 @@ function App() {
 
       const chartElement = chartRef.current;
       const canvas = await html2canvas(chartElement, {
-        scale: 2, // better resolution
+        scale: 2,
       });
       const imageData = canvas.toDataURL("image/png");
 
@@ -432,7 +430,7 @@ function App() {
       const bottomMargin = 40;
       const sideMargin = 40;
 
-      // --- HEADER (logo + title) ---
+      // Header (logo + title)
       let headerTop = 20;
       let headerBottom = headerTop;
 
@@ -471,7 +469,6 @@ function App() {
 
       const topMargin = titleY + 20;
 
-      // --- CHART IMAGE ---
       const maxWidth = pageWidth - sideMargin * 2;
       const maxHeight = pageHeight - topMargin - bottomMargin;
 
@@ -487,7 +484,6 @@ function App() {
 
       pdf.addImage(imageData, "PNG", x, y, printWidth, printHeight);
 
-      // FOOTER TEXT (fine print)
       pdf.setFontSize(8);
       pdf.setFont("helvetica", "normal");
       pdf.setTextColor(130, 130, 130);
