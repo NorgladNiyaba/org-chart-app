@@ -9,33 +9,20 @@ import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import { supabase } from "./supabaseClient";
 
-/**
- * RawRow: object where keys are column names from CSV and values are strings
- * PersonNode: {
- *   id: string;
- *   name: string;
- *   title: string;
- *   managerId: string | null;
- *   children: PersonNode[];
- * }
- */
-
 function App() {
-  const [rawRows, setRawRows] = useState([]); // parsed CSV rows
-  const [columns, setColumns] = useState([]); // column names from CSV header
+  const [rawRows, setRawRows] = useState([]);
+  const [columns, setColumns] = useState([]);
 
-  // Mapped columns
   const [nameColumn, setNameColumn] = useState("");
   const [titleColumn, setTitleColumn] = useState("");
   const [idColumn, setIdColumn] = useState("");
   const [managerIdColumn, setManagerIdColumn] = useState("");
 
-  const [companyName, setCompanyName] = useState(""); // company name input
-  const [logoDataUrl, setLogoDataUrl] = useState(""); // company logo (base64)
+  const [companyName, setCompanyName] = useState("");
+  const [logoDataUrl, setLogoDataUrl] = useState("");
   const [error, setError] = useState("");
 
-  // Saved companies & active one
-  const [savedCompanies, setSavedCompanies] = useState([]); // rows from org_companies
+  const [savedCompanies, setSavedCompanies] = useState([]);
   const [activeCompanyId, setActiveCompanyId] = useState(null);
 
   const [isLoadingCompanies, setIsLoadingCompanies] = useState(false);
@@ -47,8 +34,7 @@ function App() {
 
   const chartRef = useRef(null);
 
-  // ---------- LOAD COMPANIES FROM SUPABASE ONCE ----------
-
+  // --- Load saved companies once from Supabase ---
   useEffect(() => {
     const fetchCompanies = async () => {
       setIsLoadingCompanies(true);
@@ -61,7 +47,7 @@ function App() {
 
         if (dbError) {
           console.error(dbError);
-          setError("Failed to load saved companies from the server.");
+          setError("Could not load saved companies.");
           setSavedCompanies([]);
           return;
         }
@@ -69,7 +55,7 @@ function App() {
         setSavedCompanies(data || []);
       } catch (e) {
         console.error(e);
-        setError("Unexpected error while loading companies.");
+        setError("Unexpected error loading companies.");
         setSavedCompanies([]);
       } finally {
         setIsLoadingCompanies(false);
@@ -79,8 +65,7 @@ function App() {
     fetchCompanies();
   }, []);
 
-  // ---------- FILE UPLOAD & PARSING ----------
-
+  // --- CSV upload & parsing ---
   const handleFileUpload = (event) => {
     const file = event.target.files[0];
     if (!file) return;
@@ -93,7 +78,7 @@ function App() {
         const { data, errors, meta } = results;
 
         if (!data || data.length === 0) {
-          setError("The CSV seems to be empty.");
+          setError("The CSV appears to be empty.");
           return;
         }
 
@@ -107,7 +92,7 @@ function App() {
             ? meta.fields
             : Object.keys(data[0]);
 
-        // SPECIAL FIX: combined header like "ID,ManagerID,Name,Title"
+        // Handle the "everything ended up in one column" case
         if (
           finalColumns.length === 1 &&
           typeof finalColumns[0] === "string" &&
@@ -142,20 +127,19 @@ function App() {
         setActiveCompanyId(null);
       },
       error: (err) => {
-        console.error("PapaParse fatal error:", err);
-        setError("There was a problem parsing the CSV file.");
+        console.error("PapaParse error:", err);
+        setError("There was a problem parsing the CSV.");
       },
     });
   };
 
-  // ---------- LOGO UPLOAD ----------
-
+  // --- Logo upload ---
   const handleLogoChange = (event) => {
     const file = event.target.files[0];
     if (!file) return;
 
     if (!file.type.startsWith("image/")) {
-      setError("Please upload an image file for the logo (PNG, JPG, etc.).");
+      setError("Please upload an image file (PNG, JPG, etc.).");
       return;
     }
 
@@ -178,8 +162,7 @@ function App() {
     setLogoDataUrl("");
   };
 
-  // ---------- ORG TREE BUILDING ----------
-
+  // --- Build org tree structure ---
   const rootNodes = useMemo(() => {
     if (!rawRows.length || !nameColumn || !idColumn) {
       return [];
@@ -197,11 +180,11 @@ function App() {
           : null;
 
         if (!id) {
-          console.warn(`Row ${index + 1} is missing an ID. It will be ignored.`);
+          console.warn(`Row ${index + 1} has no ID and will be ignored.`);
           return;
         }
         if (!name) {
-          console.warn(`Row ${index + 1} is missing a Name. It will be ignored.`);
+          console.warn(`Row ${index + 1} has no Name and will be ignored.`);
           return;
         }
 
@@ -228,17 +211,17 @@ function App() {
       return roots;
     } catch (e) {
       console.error(e);
-      setError("Error while building the org chart tree. Check console for details.");
+      setError("Error while building the org chart.");
       return [];
     }
   }, [rawRows, nameColumn, titleColumn, idColumn, managerIdColumn]);
 
-  const hasMappings = useMemo(() => {
-    return !!(nameColumn && idColumn);
-  }, [nameColumn, idColumn]);
+  const hasMappings = useMemo(
+    () => !!(nameColumn && idColumn),
+    [nameColumn, idColumn]
+  );
 
-  // ---------- INLINE DATA EDITING ----------
-
+  // --- Inline table editing ---
   const handleCellChange = (rowIndex, fieldType, value) => {
     setRawRows((prev) => {
       const next = [...prev];
@@ -258,17 +241,16 @@ function App() {
     });
   };
 
-  // ---------- SAVE / LOAD / DELETE COMPANIES (SUPABASE) ----------
-
+  // --- Save / load / delete companies (Supabase) ---
   const handleSaveCompany = async () => {
     setError("");
 
     if (!companyName.trim()) {
-      setError("Please enter a company name before saving.");
+      setError("Enter a company name before saving.");
       return;
     }
     if (!rawRows.length) {
-      setError("Please upload a CSV and map its columns before saving.");
+      setError("Upload and map a CSV before saving.");
       return;
     }
 
@@ -277,7 +259,7 @@ function App() {
 
     const payload = {
       name: companyName.trim(),
-      raw_rows: rawRows, // expected supabase column name
+      raw_rows: rawRows,
       columns,
       mappings: {
         nameColumn,
@@ -301,7 +283,7 @@ function App() {
 
         if (dbError) {
           console.error(dbError);
-          setError("Failed to update company in the database.");
+          setError("Could not update the company.");
           return;
         }
         result = data;
@@ -314,13 +296,12 @@ function App() {
 
         if (dbError) {
           console.error(dbError);
-          setError("Failed to save company in the database.");
+          setError("Could not save the company.");
           return;
         }
         result = data;
       }
 
-      // Refresh list
       const { data: all, error: listError } = await supabase
         .from("org_companies")
         .select("*")
@@ -333,13 +314,12 @@ function App() {
       setActiveCompanyId(result.id);
     } catch (e) {
       console.error(e);
-      setError("Unexpected error while saving company.");
+      setError("Unexpected error while saving.");
     } finally {
       setIsSaving(false);
     }
   };
 
-  // Load from in-memory savedCompanies, tolerant of field names
   const handleLoadCompany = (companyId) => {
     setError("");
     const company = savedCompanies.find((c) => c.id === companyId);
@@ -354,11 +334,7 @@ function App() {
       company.rows ||
       [];
 
-    const loadedColumns =
-      company.columns ||
-      company.cols ||
-      [];
-
+    const loadedColumns = company.columns || company.cols || [];
     const mappings = company.mappings || company.mapping || {};
 
     setActiveCompanyId(company.id);
@@ -371,6 +347,9 @@ function App() {
     setIdColumn(mappings.idColumn || "");
     setManagerIdColumn(mappings.managerIdColumn || "");
     setLogoDataUrl(mappings.logoDataUrl || "");
+
+    // when loading a company, open the accordion if closed
+    setShowSavedAccordion(true);
   };
 
   const handleDeleteCompany = async (companyId) => {
@@ -384,7 +363,7 @@ function App() {
 
       if (dbError) {
         console.error(dbError);
-        setError("Failed to delete company from the database.");
+        setError("Could not delete the company.");
         return;
       }
 
@@ -394,14 +373,13 @@ function App() {
       }
     } catch (e) {
       console.error(e);
-      setError("Unexpected error while deleting company.");
+      setError("Unexpected error while deleting.");
     } finally {
       setIsDeleting(false);
     }
   };
 
-  // ---------- FILTERED SAVED COMPANIES ----------
-
+  // --- Filtered saved companies for search ---
   const filteredSavedCompanies = useMemo(() => {
     if (!savedSearch.trim()) return savedCompanies;
     const q = savedSearch.toLowerCase();
@@ -410,8 +388,7 @@ function App() {
     );
   }, [savedCompanies, savedSearch]);
 
-  // ---------- PDF EXPORT (WITH LOGO) ----------
-
+  // --- PDF export with logo and footer ---
   const handleDownloadPDF = async () => {
     if (!chartRef.current) return;
     try {
@@ -442,8 +419,7 @@ function App() {
       const bottomMargin = 40;
       const sideMargin = 40;
 
-      // Header (logo + title)
-      let headerTop = 20;
+      let headerTop = 24;
       let headerBottom = headerTop;
 
       if (logoImg) {
@@ -479,7 +455,7 @@ function App() {
       pdf.setFont("helvetica", "bold");
       pdf.text(titleText, pageWidth / 2, titleY, { align: "center" });
 
-      const topMargin = titleY + 20;
+      const topMargin = titleY + 22;
 
       const maxWidth = pageWidth - sideMargin * 2;
       const maxHeight = pageHeight - topMargin - bottomMargin;
@@ -510,387 +486,439 @@ function App() {
       pdf.save("org-chart.pdf");
     } catch (e) {
       console.error(e);
-      setError("Failed to generate PDF. Check console for details.");
+      setError("Failed to generate PDF.");
     }
   };
-
-  // ---------- RENDER ----------
 
   const savedCount = savedCompanies.length;
 
   return (
-    <div className="app-container">
-      <header className="app-header">
-        <h1>Organizational Chart Generator</h1>
-        <p>
-          Upload and edit people data, map columns, generate an organizational chart, and save
-          companies centrally using Supabase. Then export charts as branded PDFs.
-        </p>
+    <div className="shell">
+      {/* Top bar */}
+      <header className="shell-header">
+        <div className="logo-block">
+          <div className="logo-dot" />
+          <span className="logo-text">Sparing Consulting</span>
+          <span className="logo-separator">•</span>
+          <span className="logo-app-name">Org Chart Studio</span>
+        </div>
+        <div className="header-right">
+          <span className="header-badge">Internal tool</span>
+        </div>
       </header>
 
-      {/* SAVED COMPANIES ACCORDION */}
-      <section className="app-section">
-        <div
-          className="accordion-header"
-          onClick={() => setShowSavedAccordion((prev) => !prev)}
-        >
-          <div className="accordion-title">
-            <h2>Saved companies</h2>
-            <span className="accordion-count">
-              {savedCount} {savedCount === 1 ? "company" : "companies"}
+      {/* Main content */}
+      <main className="shell-main">
+        {/* Saved companies accordion */}
+        <section className="card">
+          <div
+            className="accordion-header"
+            onClick={() => setShowSavedAccordion((prev) => !prev)}
+          >
+            <div className="accordion-title">
+              <div className="card-title-row">
+                <h2 className="card-title">Saved companies</h2>
+                <span className="pill pill-muted">
+                  {savedCount} {savedCount === 1 ? "company" : "companies"}
+                </span>
+              </div>
+            </div>
+            <span
+              className={
+                "accordion-chevron" +
+                (showSavedAccordion ? " accordion-chevron--open" : "")
+              }
+            >
+              ▾
             </span>
           </div>
-          <span
-            className={
-              "accordion-chevron" + (showSavedAccordion ? " accordion-chevron--open" : "")
-            }
-          >
-            ▾
-          </span>
-        </div>
 
-        {showSavedAccordion && (
-          <div className="accordion-body">
-            {isLoadingCompanies ? (
-              <p className="hint">Loading companies from server…</p>
-            ) : savedCompanies.length === 0 ? (
-              <p className="hint">
-                No companies saved yet. Once you upload data and set up the chart, click{" "}
-                <strong>Save company</strong> in Step 4.
-              </p>
-            ) : (
-              <>
-                <div className="saved-search-wrapper">
+          {showSavedAccordion && (
+            <div className="accordion-body">
+              {isLoadingCompanies ? (
+                <p className="text-muted">Loading from Supabase…</p>
+              ) : savedCompanies.length === 0 ? (
+                <p className="text-muted">
+                  Save a company after building a chart to access it here.
+                </p>
+              ) : (
+                <>
+                  <div className="saved-search-wrapper">
+                    <input
+                      type="text"
+                      className="input"
+                      placeholder="Search by name…"
+                      value={savedSearch}
+                      onChange={(e) => setSavedSearch(e.target.value)}
+                    />
+                  </div>
+                  {filteredSavedCompanies.length === 0 ? (
+                    <p className="text-muted text-small">
+                      No companies match that search.
+                    </p>
+                  ) : (
+                    <div className="saved-list">
+                      {filteredSavedCompanies.map((c) => (
+                        <div
+                          key={c.id}
+                          className={
+                            "saved-item" +
+                            (c.id === activeCompanyId ? " saved-item--active" : "")
+                          }
+                        >
+                          <div className="saved-item-main">
+                            <div className="saved-item-name">
+                              {c.name || "Untitled company"}
+                            </div>
+                            {c.updated_at && (
+                              <div className="saved-item-meta">
+                                {new Date(c.updated_at).toLocaleString(undefined, {
+                                  dateStyle: "short",
+                                  timeStyle: "short",
+                                })}
+                              </div>
+                            )}
+                          </div>
+                          <div className="saved-item-actions">
+                            <button
+                              className="btn btn-outline"
+                              type="button"
+                              onClick={() => handleLoadCompany(c.id)}
+                            >
+                              Load
+                            </button>
+                            <button
+                              className="btn btn-danger"
+                              type="button"
+                              disabled={isDeleting}
+                              onClick={() => handleDeleteCompany(c.id)}
+                            >
+                              {isDeleting ? "Deleting…" : "Delete"}
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+        </section>
+
+        {/* Two-column layout for main workflow */}
+        <div className="grid-main">
+          {/* Left column: company + data config */}
+          <div className="grid-col">
+            {/* Company block */}
+            <section className="card">
+              <div className="card-title-row">
+                <h2 className="card-title">Company</h2>
+              </div>
+
+              <div className="company-grid">
+                <div className="field">
+                  <label htmlFor="companyName" className="label">
+                    Name
+                  </label>
                   <input
+                    id="companyName"
                     type="text"
-                    className="saved-search-input"
-                    placeholder="Search saved companies by name…"
-                    value={savedSearch}
-                    onChange={(e) => setSavedSearch(e.target.value)}
+                    className="input"
+                    value={companyName}
+                    onChange={(e) => setCompanyName(e.target.value)}
+                    placeholder="Acme Corporation"
                   />
                 </div>
-                {filteredSavedCompanies.length === 0 ? (
-                  <p className="hint small">
-                    No companies match that search.
-                  </p>
-                ) : (
-                  <div className="saved-list">
-                    {filteredSavedCompanies.map((c) => (
-                      <div
-                        key={c.id}
-                        className={
-                          "saved-item" +
-                          (c.id === activeCompanyId ? " saved-item--active" : "")
-                        }
+
+                <div className="field">
+                  <label htmlFor="companyLogo" className="label">
+                    Logo
+                  </label>
+                  <input
+                    id="companyLogo"
+                    type="file"
+                    accept="image/*"
+                    onChange={handleLogoChange}
+                    className="input-file"
+                  />
+                  {logoDataUrl && (
+                    <div className="logo-preview-wrapper">
+                      <img
+                        src={logoDataUrl}
+                        alt="Company logo preview"
+                        className="logo-preview"
+                      />
+                      <button
+                        type="button"
+                        className="btn-link"
+                        onClick={clearLogo}
                       >
-                        <div className="saved-item-main">
-                          <div className="saved-item-name">
-                            {c.name || "Untitled company"}
-                          </div>
-                          {c.updated_at && (
-                            <div className="saved-item-meta">
-                              Last updated:{" "}
-                              {new Date(c.updated_at).toLocaleString(undefined, {
-                                dateStyle: "short",
-                                timeStyle: "short",
-                              })}
-                            </div>
-                          )}
-                        </div>
-                        <div className="saved-item-actions">
-                          <button
-                            className="secondary-btn"
-                            type="button"
-                            onClick={() => handleLoadCompany(c.id)}
-                          >
-                            Load
-                          </button>
-                          <button
-                            className="danger-btn"
-                            type="button"
-                            disabled={isDeleting}
-                            onClick={() => handleDeleteCompany(c.id)}
-                          >
-                            {isDeleting ? "Deleting…" : "Delete"}
-                          </button>
-                        </div>
-                      </div>
-                    ))}
+                        Remove
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </section>
+
+            {/* Data import + mapping */}
+            <section className="card">
+              <div className="card-title-row">
+                <h2 className="card-title">People data</h2>
+                <span className="pill pill-soft">CSV</span>
+              </div>
+
+              <div className="field stack-sm">
+                <label className="label">Upload CSV</label>
+                <input
+                  type="file"
+                  accept=".csv"
+                  onChange={handleFileUpload}
+                  className="input-file"
+                />
+                <div className="text-muted text-small">
+                  Expected columns: <span className="code">ID</span>,{" "}
+                  <span className="code">ManagerID</span>,{" "}
+                  <span className="code">Name</span>,{" "}
+                  <span className="code">Title</span> (optional).
+                </div>
+                {rawRows.length > 0 && (
+                  <div className="text-muted text-small">
+                    Loaded <strong>{rawRows.length}</strong> rows.
                   </div>
                 )}
-              </>
-            )}
-          </div>
-        )}
-      </section>
-
-      {/* STEP 1 */}
-      <section className="app-section">
-        <h2>1. Company info, logo & CSV upload</h2>
-
-        <div className="company-grid">
-          <div className="company-name-row">
-            <label htmlFor="companyName">Company name</label>
-            <input
-              id="companyName"
-              type="text"
-              value={companyName}
-              onChange={(e) => setCompanyName(e.target.value)}
-              placeholder="e.g. Acme Corp"
-            />
-            <p className="hint small">
-              This will appear as the title on the exported PDF (e.g. “Acme Corp Organizational
-              Chart”).
-            </p>
-          </div>
-
-          <div className="logo-row">
-            <label htmlFor="companyLogo">Company logo (optional)</label>
-            <input
-              id="companyLogo"
-              type="file"
-              accept="image/*"
-              onChange={handleLogoChange}
-            />
-            {logoDataUrl ? (
-              <div className="logo-preview-wrapper">
-                <img
-                  src={logoDataUrl}
-                  alt="Company logo preview"
-                  className="logo-preview"
-                />
-                <button
-                  type="button"
-                  className="text-btn"
-                  onClick={clearLogo}
-                >
-                  Remove logo
-                </button>
               </div>
-            ) : (
-              <p className="hint small">
-                If provided, the logo will appear above the company name in the chart preview and
-                the exported PDF.
-              </p>
-            )}
+
+              <div className="divider" />
+
+              <div className="mapping-grid">
+                <ColumnSelector
+                  label="Name column"
+                  required
+                  value={nameColumn}
+                  onChange={setNameColumn}
+                  columns={columns}
+                />
+                <ColumnSelector
+                  label="Title column"
+                  value={titleColumn}
+                  onChange={setTitleColumn}
+                  columns={columns}
+                />
+                <ColumnSelector
+                  label="ID column"
+                  required
+                  value={idColumn}
+                  onChange={setIdColumn}
+                  columns={columns}
+                />
+                <ColumnSelector
+                  label="Manager ID column"
+                  value={managerIdColumn}
+                  onChange={setManagerIdColumn}
+                  columns={columns}
+                />
+              </div>
+              {!hasMappings && rawRows.length > 0 && (
+                <p className="text-error">
+                  Map at least a Name and ID column to build the chart.
+                </p>
+              )}
+            </section>
+
+            {/* Table editing */}
+            <section className="card">
+              <div className="card-title-row">
+                <h2 className="card-title">Table view</h2>
+              </div>
+
+              {rawRows.length === 0 ? (
+                <p className="text-muted">
+                  Upload a CSV to review and edit rows.
+                </p>
+              ) : !hasMappings ? (
+                <p className="text-muted">
+                  Map Name and ID to edit in a structured table.
+                </p>
+              ) : (
+                <>
+                  <div className="text-muted text-small mb-2">
+                    Edit cells inline. Changes apply immediately.
+                  </div>
+                  <div className="table-wrapper">
+                    <table className="data-table">
+                      <thead>
+                        <tr>
+                          <th>ID</th>
+                          <th>Manager ID</th>
+                          <th>Name</th>
+                          <th>Title</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rawRows.map((row, index) => {
+                          const idValue = idColumn ? String(row[idColumn] ?? "") : "";
+                          const managerValue = managerIdColumn
+                            ? String(row[managerIdColumn] ?? "")
+                            : "";
+                          const nameValue = nameColumn
+                            ? String(row[nameColumn] ?? "")
+                            : "";
+                          const titleValue = titleColumn
+                            ? String(row[titleColumn] ?? "")
+                            : "";
+
+                          return (
+                            <tr key={index}>
+                              <td>
+                                <input
+                                  className="cell-input"
+                                  value={idValue}
+                                  onChange={(e) =>
+                                    handleCellChange(index, "id", e.target.value)
+                                  }
+                                />
+                              </td>
+                              <td>
+                                <input
+                                  className="cell-input"
+                                  value={managerValue}
+                                  onChange={(e) =>
+                                    handleCellChange(
+                                      index,
+                                      "manager",
+                                      e.target.value
+                                    )
+                                  }
+                                  disabled={!managerIdColumn}
+                                  placeholder={
+                                    !managerIdColumn ? "—" : ""
+                                  }
+                                />
+                              </td>
+                              <td>
+                                <input
+                                  className="cell-input"
+                                  value={nameValue}
+                                  onChange={(e) =>
+                                    handleCellChange(index, "name", e.target.value)
+                                  }
+                                />
+                              </td>
+                              <td>
+                                <input
+                                  className="cell-input"
+                                  value={titleValue}
+                                  onChange={(e) =>
+                                    handleCellChange(index, "title", e.target.value)
+                                  }
+                                  disabled={!titleColumn}
+                                  placeholder={!titleColumn ? "—" : ""}
+                                />
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </section>
+          </div>
+
+          {/* Right column: chart + actions */}
+          <div className="grid-col">
+            <section className="card card-chart">
+              <div className="card-title-row">
+                <h2 className="card-title">Org chart</h2>
+                <div className="card-title-actions">
+                  <button
+                    className="btn btn-outline"
+                    type="button"
+                    onClick={handleSaveCompany}
+                    disabled={isSaving}
+                  >
+                    {isSaving
+                      ? "Saving…"
+                      : activeCompanyId
+                      ? "Update company"
+                      : "Save company"}
+                  </button>
+                  <button
+                    className="btn btn-primary"
+                    type="button"
+                    onClick={handleDownloadPDF}
+                    disabled={!rootNodes.length || !hasMappings}
+                  >
+                    Export PDF
+                  </button>
+                </div>
+              </div>
+
+              {error && <p className="text-error mb-2">{error}</p>}
+
+              {!rawRows.length && (
+                <p className="text-muted">
+                  Upload data and map columns to render a chart.
+                </p>
+              )}
+
+              {rawRows.length > 0 && !rootNodes.length && hasMappings && (
+                <p className="text-error">
+                  No valid nodes could be built. Check for missing IDs or Names.
+                </p>
+              )}
+
+              {rootNodes.length > 0 && hasMappings && (
+                <>
+                  <div className="chart-heading">
+                    {logoDataUrl && (
+                      <img
+                        src={logoDataUrl}
+                        alt="Company logo"
+                        className="chart-logo"
+                      />
+                    )}
+                    {companyName ? (
+                      <h3 className="chart-title-text">
+                        {companyName} Organizational Chart
+                      </h3>
+                    ) : (
+                      <h3 className="chart-title-text">Organizational Chart</h3>
+                    )}
+                  </div>
+
+                  <div className="chart-wrapper" ref={chartRef}>
+                    <div className="chart-container">
+                      {rootNodes.map((root) => (
+                        <OrgNode key={root.id} node={root} />
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+            </section>
           </div>
         </div>
-
-        <p className="hint">
-          Expected CSV columns: <strong>ID</strong>, <strong>ManagerID</strong> (optional),{" "}
-          <strong>Name</strong>, <strong>Title</strong> (optional).
-        </p>
-
-        <input type="file" accept=".csv" onChange={handleFileUpload} />
-        {rawRows.length > 0 && (
-          <p className="hint small">
-            Loaded <strong>{rawRows.length}</strong> rows. Next, map the columns below.
-          </p>
-        )}
-      </section>
-
-      {/* STEP 2 – mapping */}
-      <section className="app-section">
-        <h2>2. Map columns</h2>
-
-        {columns.length === 0 ? (
-          <p className="hint">
-            Upload a CSV in Step 1 to choose which columns correspond to Name, Title, ID, and
-            Manager.
-          </p>
-        ) : (
-          <>
-            <div className="mapping-grid">
-              <ColumnSelector
-                label="Name column (required)"
-                value={nameColumn}
-                onChange={setNameColumn}
-                columns={columns}
-              />
-              <ColumnSelector
-                label="Title column (optional)"
-                value={titleColumn}
-                onChange={setTitleColumn}
-                columns={columns}
-              />
-              <ColumnSelector
-                label="ID column (required)"
-                value={idColumn}
-                onChange={setIdColumn}
-                columns={columns}
-              />
-              <ColumnSelector
-                label="Manager ID column (optional)"
-                value={managerIdColumn}
-                onChange={setManagerIdColumn}
-                columns={columns}
-              />
-            </div>
-            {!hasMappings && (
-              <p className="hint error">
-                Please select at least a Name and an ID column to build the chart.
-              </p>
-            )}
-          </>
-        )}
-      </section>
-
-      {/* STEP 3 – inline data editing */}
-      <section className="app-section">
-        <h2>3. Review & edit people data</h2>
-
-        {rawRows.length === 0 ? (
-          <p className="hint">
-            Upload a CSV in Step 1 to see and edit the people data here.
-          </p>
-        ) : !hasMappings ? (
-          <p className="hint">
-            Map at least the <strong>Name</strong> and <strong>ID</strong> columns in Step 2 to
-            edit the data in a structured table.
-          </p>
-        ) : (
-          <>
-            <p className="hint small">
-              Edit values directly in the table below. Changes will immediately update the org
-              chart in Step 4.
-            </p>
-            <div className="data-table-wrapper">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>ID</th>
-                    <th>Manager ID</th>
-                    <th>Name</th>
-                    <th>Title</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rawRows.map((row, index) => {
-                    const idValue = idColumn ? String(row[idColumn] ?? "") : "";
-                    const managerValue = managerIdColumn
-                      ? String(row[managerIdColumn] ?? "")
-                      : "";
-                    const nameValue = nameColumn ? String(row[nameColumn] ?? "") : "";
-                    const titleValue = titleColumn ? String(row[titleColumn] ?? "") : "";
-
-                    return (
-                      <tr key={index}>
-                        <td>
-                          <input
-                            className="cell-input"
-                            value={idValue}
-                            onChange={(e) =>
-                              handleCellChange(index, "id", e.target.value)
-                            }
-                          />
-                        </td>
-                        <td>
-                          <input
-                            className="cell-input"
-                            value={managerValue}
-                            onChange={(e) =>
-                              handleCellChange(index, "manager", e.target.value)
-                            }
-                            disabled={!managerIdColumn}
-                            placeholder={!managerIdColumn ? "No column mapped" : ""}
-                          />
-                        </td>
-                        <td>
-                          <input
-                            className="cell-input"
-                            value={nameValue}
-                            onChange={(e) =>
-                              handleCellChange(index, "name", e.target.value)
-                            }
-                          />
-                        </td>
-                        <td>
-                          <input
-                            className="cell-input"
-                            value={titleValue}
-                            onChange={(e) =>
-                              handleCellChange(index, "title", e.target.value)
-                            }
-                            disabled={!titleColumn}
-                            placeholder={!titleColumn ? "No column mapped" : ""}
-                          />
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </>
-        )}
-      </section>
-
-      {/* STEP 4 – chart + save + export */}
-      <section className="app-section">
-        <h2>4. Org chart preview, save & export</h2>
-        {error && <p className="hint error">{error}</p>}
-        {!rawRows.length && <p className="hint">Upload a CSV to see the chart here.</p>}
-        {rawRows.length > 0 && !rootNodes.length && hasMappings && (
-          <p className="hint error">
-            No valid nodes could be built. Check the console for warnings (missing ID / Name, etc.).
-          </p>
-        )}
-
-        {rootNodes.length > 0 && hasMappings && (
-          <>
-            <div className="chart-heading">
-              {logoDataUrl && (
-                <img
-                  src={logoDataUrl}
-                  alt="Company logo"
-                  className="chart-company-logo"
-                />
-              )}
-              {companyName ? (
-                <h3 className="chart-title">{companyName} Organizational Chart</h3>
-              ) : (
-                <h3 className="chart-title">Organizational Chart</h3>
-              )}
-            </div>
-
-            <div className="chart-wrapper" ref={chartRef}>
-              <div className="chart-container">
-                {rootNodes.map((root) => (
-                  <OrgNode key={root.id} node={root} />
-                ))}
-              </div>
-            </div>
-
-            <div className="actions-row">
-              <button
-                className="secondary-btn"
-                type="button"
-                onClick={handleSaveCompany}
-                disabled={isSaving}
-              >
-                {isSaving
-                  ? "Saving…"
-                  : activeCompanyId
-                  ? "Update saved company"
-                  : "Save company"}
-              </button>
-              <button className="primary-btn" type="button" onClick={handleDownloadPDF}>
-                Download as PDF
-              </button>
-            </div>
-          </>
-        )}
-      </section>
+      </main>
     </div>
   );
 }
 
-function ColumnSelector({ label, value, onChange, columns }) {
+function ColumnSelector({ label, required = false, value, onChange, columns }) {
   return (
     <div className="field">
-      <label>{label}</label>
-      <select value={value} onChange={(e) => onChange(e.target.value)}>
-        <option value="">-- Not selected --</option>
+      <label className="label">
+        {label} {required && <span className="label-required">*</span>}
+      </label>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="select"
+      >
+        <option value="">Not mapped</option>
         {columns.map((col) => (
           <option key={col} value={col}>
             {col}
