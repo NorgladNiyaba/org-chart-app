@@ -42,6 +42,9 @@ function App() {
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  const [showSavedAccordion, setShowSavedAccordion] = useState(false);
+  const [savedSearch, setSavedSearch] = useState("");
+
   const chartRef = useRef(null);
 
   // ---------- LOAD COMPANIES FROM SUPABASE ONCE ----------
@@ -336,7 +339,7 @@ function App() {
     }
   };
 
-  // ⚙️ Load from in-memory savedCompanies, tolerating different field names
+  // Load from in-memory savedCompanies, tolerant of field names
   const handleLoadCompany = (companyId) => {
     setError("");
     const company = savedCompanies.find((c) => c.id === companyId);
@@ -345,7 +348,6 @@ function App() {
       return;
     }
 
-    // Some users might have columns named raw_rows, rawRows, etc.
     const loadedRows =
       company.raw_rows ||
       company.rawRows ||
@@ -397,6 +399,16 @@ function App() {
       setIsDeleting(false);
     }
   };
+
+  // ---------- FILTERED SAVED COMPANIES ----------
+
+  const filteredSavedCompanies = useMemo(() => {
+    if (!savedSearch.trim()) return savedCompanies;
+    const q = savedSearch.toLowerCase();
+    return savedCompanies.filter((c) =>
+      (c.name || "").toLowerCase().includes(q)
+    );
+  }, [savedCompanies, savedSearch]);
 
   // ---------- PDF EXPORT (WITH LOGO) ----------
 
@@ -504,6 +516,8 @@ function App() {
 
   // ---------- RENDER ----------
 
+  const savedCount = savedCompanies.length;
+
   return (
     <div className="app-container">
       <header className="app-header">
@@ -514,56 +528,98 @@ function App() {
         </p>
       </header>
 
-      {/* SAVED COMPANIES BAR */}
+      {/* SAVED COMPANIES ACCORDION */}
       <section className="app-section">
-        <h2>Saved companies</h2>
-        {isLoadingCompanies ? (
-          <p className="hint">Loading companies from server…</p>
-        ) : savedCompanies.length === 0 ? (
-          <p className="hint">
-            No companies saved yet. Once you upload data and set up the chart, click{" "}
-            <strong>Save company</strong> in Step 4.
-          </p>
-        ) : (
-          <div className="saved-list">
-            {savedCompanies.map((c) => (
-              <div
-                key={c.id}
-                className={
-                  "saved-item" + (c.id === activeCompanyId ? " saved-item--active" : "")
-                }
-              >
-                <div className="saved-item-main">
-                  <div className="saved-item-name">{c.name || "Untitled company"}</div>
-                  {c.updated_at && (
-                    <div className="saved-item-meta">
-                      Last updated:{" "}
-                      {new Date(c.updated_at).toLocaleString(undefined, {
-                        dateStyle: "short",
-                        timeStyle: "short",
-                      })}
-                    </div>
-                  )}
+        <div
+          className="accordion-header"
+          onClick={() => setShowSavedAccordion((prev) => !prev)}
+        >
+          <div className="accordion-title">
+            <h2>Saved companies</h2>
+            <span className="accordion-count">
+              {savedCount} {savedCount === 1 ? "company" : "companies"}
+            </span>
+          </div>
+          <span
+            className={
+              "accordion-chevron" + (showSavedAccordion ? " accordion-chevron--open" : "")
+            }
+          >
+            ▾
+          </span>
+        </div>
+
+        {showSavedAccordion && (
+          <div className="accordion-body">
+            {isLoadingCompanies ? (
+              <p className="hint">Loading companies from server…</p>
+            ) : savedCompanies.length === 0 ? (
+              <p className="hint">
+                No companies saved yet. Once you upload data and set up the chart, click{" "}
+                <strong>Save company</strong> in Step 4.
+              </p>
+            ) : (
+              <>
+                <div className="saved-search-wrapper">
+                  <input
+                    type="text"
+                    className="saved-search-input"
+                    placeholder="Search saved companies by name…"
+                    value={savedSearch}
+                    onChange={(e) => setSavedSearch(e.target.value)}
+                  />
                 </div>
-                <div className="saved-item-actions">
-                  <button
-                    className="secondary-btn"
-                    type="button"
-                    onClick={() => handleLoadCompany(c.id)}
-                  >
-                    Load
-                  </button>
-                  <button
-                    className="danger-btn"
-                    type="button"
-                    disabled={isDeleting}
-                    onClick={() => handleDeleteCompany(c.id)}
-                  >
-                    {isDeleting ? "Deleting…" : "Delete"}
-                  </button>
-                </div>
-              </div>
-            ))}
+                {filteredSavedCompanies.length === 0 ? (
+                  <p className="hint small">
+                    No companies match that search.
+                  </p>
+                ) : (
+                  <div className="saved-list">
+                    {filteredSavedCompanies.map((c) => (
+                      <div
+                        key={c.id}
+                        className={
+                          "saved-item" +
+                          (c.id === activeCompanyId ? " saved-item--active" : "")
+                        }
+                      >
+                        <div className="saved-item-main">
+                          <div className="saved-item-name">
+                            {c.name || "Untitled company"}
+                          </div>
+                          {c.updated_at && (
+                            <div className="saved-item-meta">
+                              Last updated:{" "}
+                              {new Date(c.updated_at).toLocaleString(undefined, {
+                                dateStyle: "short",
+                                timeStyle: "short",
+                              })}
+                            </div>
+                          )}
+                        </div>
+                        <div className="saved-item-actions">
+                          <button
+                            className="secondary-btn"
+                            type="button"
+                            onClick={() => handleLoadCompany(c.id)}
+                          >
+                            Load
+                          </button>
+                          <button
+                            className="danger-btn"
+                            type="button"
+                            disabled={isDeleting}
+                            onClick={() => handleDeleteCompany(c.id)}
+                          >
+                            {isDeleting ? "Deleting…" : "Delete"}
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
           </div>
         )}
       </section>
