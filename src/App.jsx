@@ -32,6 +32,11 @@ function App() {
   const [showSavedAccordion, setShowSavedAccordion] = useState(false);
   const [savedSearch, setSavedSearch] = useState("");
 
+  // new: chart theme
+  const [chartTheme, setChartTheme] = useState("classic");
+
+  // chartRef now points to the inner wrapper that contains the full chart,
+  // not the scroll container, so the PDF captures everything.
   const chartRef = useRef(null);
 
   // --- Load saved companies once from Supabase ---
@@ -92,7 +97,7 @@ function App() {
             ? meta.fields
             : Object.keys(data[0]);
 
-        // Handle the "everything ended up in one column" case
+        // Handle the "everything in one column" case
         if (
           finalColumns.length === 1 &&
           typeof finalColumns[0] === "string" &&
@@ -348,7 +353,6 @@ function App() {
     setManagerIdColumn(mappings.managerIdColumn || "");
     setLogoDataUrl(mappings.logoDataUrl || "");
 
-    // when loading a company, open the accordion if closed
     setShowSavedAccordion(true);
   };
 
@@ -379,7 +383,7 @@ function App() {
     }
   };
 
-  // --- Filtered saved companies for search ---
+  // --- Filter saved companies for search ---
   const filteredSavedCompanies = useMemo(() => {
     if (!savedSearch.trim()) return savedCompanies;
     const q = savedSearch.toLowerCase();
@@ -388,7 +392,7 @@ function App() {
     );
   }, [savedCompanies, savedSearch]);
 
-  // --- PDF export with logo and footer ---
+  // --- PDF export (uses full chartRef content) ---
   const handleDownloadPDF = async () => {
     if (!chartRef.current) return;
     try {
@@ -405,6 +409,9 @@ function App() {
       const chartElement = chartRef.current;
       const canvas = await html2canvas(chartElement, {
         scale: 2,
+        useCORS: true,
+        scrollX: 0,
+        scrollY: 0,
       });
       const imageData = canvas.toDataURL("image/png");
 
@@ -606,9 +613,9 @@ function App() {
           )}
         </section>
 
-        {/* Two-column layout for main workflow */}
+        {/* Main two-column layout */}
         <div className="grid-main">
-          {/* Left column: company + data config */}
+          {/* Left column */}
           <div className="grid-col">
             {/* Company block */}
             <section className="card">
@@ -834,6 +841,18 @@ function App() {
               <div className="card-title-row">
                 <h2 className="card-title">Org chart</h2>
                 <div className="card-title-actions">
+                  <div className="field chart-theme-field">
+                    <label className="label">Style</label>
+                    <select
+                      className="select select-sm"
+                      value={chartTheme}
+                      onChange={(e) => setChartTheme(e.target.value)}
+                    >
+                      <option value="classic">Classic</option>
+                      <option value="arrowed">Arrowed</option>
+                      <option value="dashed">Dashed</option>
+                    </select>
+                  </div>
                   <button
                     className="btn btn-outline"
                     type="button"
@@ -890,11 +909,17 @@ function App() {
                     )}
                   </div>
 
-                  <div className="chart-wrapper" ref={chartRef}>
-                    <div className="chart-container">
-                      {rootNodes.map((root) => (
-                        <OrgNode key={root.id} node={root} />
-                      ))}
+                  {/* Scroll container for UI; inner wrapper used for PDF capture */}
+                  <div className="chart-scroll">
+                    <div
+                      className={`chart-wrapper theme-${chartTheme}`}
+                      ref={chartRef}
+                    >
+                      <div className="chart-container">
+                        {rootNodes.map((root) => (
+                          <OrgNode key={root.id} node={root} />
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </>

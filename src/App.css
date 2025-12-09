@@ -116,11 +116,11 @@ body {
 
 .card-title-actions {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 8px;
 }
 
-/* --- Pills / tags --- */
+/* --- Pills --- */
 
 .pill {
   display: inline-flex;
@@ -160,7 +160,7 @@ body {
   margin-bottom: 8px;
 }
 
-/* --- Accordion (saved companies) --- */
+/* --- Accordion --- */
 
 .accordion-header {
   display: flex;
@@ -181,10 +181,6 @@ body {
 
 .accordion-body {
   margin-top: 10px;
-}
-
-.saved-search-wrapper {
-  margin-bottom: 6px;
 }
 
 /* --- Inputs / selects / buttons --- */
@@ -223,6 +219,11 @@ body {
   background: #ffffff;
   border-color: #e85d38;
   box-shadow: 0 0 0 1px #e85d38;
+}
+
+.select-sm {
+  padding: 4px 8px;
+  font-size: 0.8rem;
 }
 
 .input-file {
@@ -334,9 +335,18 @@ body {
   gap: 12px;
 }
 
+.chart-theme-field {
+  min-width: 120px;
+}
+
 @media (max-width: 768px) {
   .company-grid {
     grid-template-columns: 1fr;
+  }
+
+  .card-title-actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
   }
 }
 
@@ -349,6 +359,10 @@ body {
 }
 
 /* --- Saved companies list --- */
+
+.saved-search-wrapper {
+  margin-bottom: 6px;
+}
 
 .saved-list {
   display: flex;
@@ -509,13 +523,20 @@ body {
   color: #111827;
 }
 
-.chart-wrapper {
+/* scroll container for UI only */
+.chart-scroll {
   margin-top: 10px;
-  padding: 14px;
   border-radius: 12px;
-  background: #f9fafb;
   border: 1px solid #e5e7eb;
+  background: #f9fafb;
   overflow: auto;
+}
+
+/* inner wrapper: full chart; this is what we capture for PDF */
+.chart-wrapper {
+  padding: 14px;
+  display: inline-block;
+  overflow: visible;
 }
 
 .chart-container {
@@ -536,7 +557,7 @@ body {
 
 .org-node-box {
   min-width: 160px;
-  max-width: 200px;
+  max-width: 220px;
   padding: 8px 10px;
   background: #ffffff;
   border-radius: 10px;
@@ -574,4 +595,42 @@ body {
   display: flex;
   gap: 16px;
   margin-top: 8px;
+}
+
+/* --- Themes for connectors --- */
+
+/* Classic: default solid line (already handled by base styles) */
+
+/* Arrowed theme: darker line with triangle arrowhead */
+.theme-arrowed .org-vertical-line {
+  position: relative;
+  background: #4b5563;
+}
+.theme-arrowed .org-vertical-line::after {
+  content: "";
+  position: absolute;
+  bottom: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 4px 4px 0 4px;
+  border-style: solid;
+  border-color: #4b5563 transparent transparent transparent;
+}
+
+/* Dashed theme: dashed connectors */
+.theme-dashed .org-vertical-line {
+  height: 16px;
+  background: none;
+  border-left: 1px dashed #9ca3af;
+}
+.theme-dashed .org-children {
+  border-top: 1px dashed #9ca3af;
+  padding-top: 8px;
+  margin-top: 0;
+}
+
+/* Classic theme fixes to avoid dashed border on others */
+.theme-classic .org-children {
+  border-top: none;
+  padding-top: 0;
 }
