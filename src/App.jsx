@@ -1,8 +1,7 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import Papa from "papaparse";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
-import { supabase } from "./supabaseClient";
 
 function App() {
   const [rawRows, setRawRows] = useState([]);
@@ -14,45 +13,8 @@ function App() {
   const [companyName, setCompanyName] = useState("");
   const [logoDataUrl, setLogoDataUrl] = useState("");
   const [error, setError] = useState("");
-  const [savedCompanies, setSavedCompanies] = useState([]);
-  const [activeCompanyId, setActiveCompanyId] = useState(null);
-  const [isLoadingCompanies, setIsLoadingCompanies] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [showSavedAccordion, setShowSavedAccordion] = useState(false);
-  const [savedSearch, setSavedSearch] = useState("");
   const [chartTheme, setChartTheme] = useState("classic");
   const chartRef = useRef(null);
-
-  useEffect(() => {
-    const fetchCompanies = async () => {
-      setIsLoadingCompanies(true);
-      setError("");
-      try {
-        const { data, error: dbError } = await supabase
-          .from("org_companies")
-          .select("*")
-          .order("updated_at", { ascending: false });
-
-        if (dbError) {
-          console.error(dbError);
-          setError("We couldn't load your saved charts.");
-          setSavedCompanies([]);
-          return;
-        }
-
-        setSavedCompanies(data || []);
-      } catch (e) {
-        console.error(e);
-        setError("Something went wrong while loading your saved charts.");
-        setSavedCompanies([]);
-      } finally {
-        setIsLoadingCompanies(false);
-      }
-    };
-
-    fetchCompanies();
-  }, []);
 
   const handleFileUpload = (event) => {
     const file = event.target.files[0];
@@ -109,7 +71,6 @@ function App() {
         setTitleColumn("");
         setIdColumn("");
         setManagerIdColumn("");
-        setActiveCompanyId(null);
       },
       error: (err) => {
         console.error("PapaParse error:", err);
@@ -204,22 +165,12 @@ function App() {
     [nameColumn, idColumn]
   );
 
-  const filteredSavedCompanies = useMemo(() => {
-    if (!savedSearch.trim()) return savedCompanies;
-    const q = savedSearch.toLowerCase();
-    return savedCompanies.filter((c) =>
-      (c.name || "").toLowerCase().includes(q)
-    );
-  }, [savedCompanies, savedSearch]);
-
-  const activeCompany = useMemo(
-    () => savedCompanies.find((company) => company.id === activeCompanyId) || null,
-    [activeCompanyId, savedCompanies]
-  );
-
   const peopleCount = rawRows.length;
   const readyToBuild = rawRows.length > 0 && hasMappings;
   const canExport = rootNodes.length > 0 && hasMappings;
+  const mappedCount = [nameColumn, idColumn, titleColumn, managerIdColumn].filter(
+    Boolean
+  ).length;
   const completionLabel = !rawRows.length
     ? "Start with your company details and CSV file."
     : !hasMappings
@@ -245,135 +196,6 @@ function App() {
       next[rowIndex] = currentRow;
       return next;
     });
-  };
-
-  const handleSaveCompany = async () => {
-    setError("");
-
-    if (!companyName.trim()) {
-      setError("Enter your company name before saving.");
-      return;
-    }
-    if (!rawRows.length) {
-      setError("Upload your team CSV before saving.");
-      return;
-    }
-
-    setIsSaving(true);
-    const now = new Date().toISOString();
-
-    const payload = {
-      name: companyName.trim(),
-      raw_rows: rawRows,
-      columns,
-      mappings: {
-        nameColumn,
-        titleColumn,
-        idColumn,
-        managerIdColumn,
-        logoDataUrl,
-      },
-      updated_at: now,
-    };
-
-    try {
-      let result;
-      if (activeCompanyId) {
-        const { data, error: dbError } = await supabase
-          .from("org_companies")
-          .update(payload)
-          .eq("id", activeCompanyId)
-          .select("*")
-          .single();
-
-        if (dbError) {
-          console.error(dbError);
-          setError("We couldn't update this chart.");
-          return;
-        }
-        result = data;
-      } else {
-        const { data, error: dbError } = await supabase
-          .from("org_companies")
-          .insert([{ ...payload }])
-          .select("*")
-          .single();
-
-        if (dbError) {
-          console.error(dbError);
-          setError("We couldn't save this chart.");
-          return;
-        }
-        result = data;
-      }
-
-      const { data: all, error: listError } = await supabase
-        .from("org_companies")
-        .select("*")
-        .order("updated_at", { ascending: false });
-
-      if (!listError) {
-        setSavedCompanies(all || []);
-      }
-
-      setActiveCompanyId(result.id);
-    } catch (e) {
-      console.error(e);
-      setError("Something went wrong while saving.");
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleLoadCompany = (companyId) => {
-    setError("");
-    const company = savedCompanies.find((c) => c.id === companyId);
-    if (!company) {
-      console.warn("Company not found for id", companyId);
-      return;
-    }
-
-    const loadedRows = company.raw_rows || company.rawRows || company.rows || [];
-    const loadedColumns = company.columns || company.cols || [];
-    const mappings = company.mappings || company.mapping || {};
-
-    setActiveCompanyId(company.id);
-    setCompanyName(company.name || "");
-    setRawRows(Array.isArray(loadedRows) ? loadedRows : []);
-    setColumns(Array.isArray(loadedColumns) ? loadedColumns : []);
-    setNameColumn(mappings.nameColumn || "");
-    setTitleColumn(mappings.titleColumn || "");
-    setIdColumn(mappings.idColumn || "");
-    setManagerIdColumn(mappings.managerIdColumn || "");
-    setLogoDataUrl(mappings.logoDataUrl || "");
-    setShowSavedAccordion(true);
-  };
-
-  const handleDeleteCompany = async (companyId) => {
-    setError("");
-    setIsDeleting(true);
-    try {
-      const { error: dbError } = await supabase
-        .from("org_companies")
-        .delete()
-        .eq("id", companyId);
-
-      if (dbError) {
-        console.error(dbError);
-        setError("We couldn't remove this saved chart.");
-        return;
-      }
-
-      setSavedCompanies((prev) => prev.filter((c) => c.id !== companyId));
-      if (activeCompanyId === companyId) {
-        setActiveCompanyId(null);
-      }
-    } catch (e) {
-      console.error(e);
-      setError("Something went wrong while deleting.");
-    } finally {
-      setIsDeleting(false);
-    }
   };
 
   const handleDownloadPDF = async () => {
@@ -462,15 +284,10 @@ function App() {
     }
   };
 
-  const savedCount = savedCompanies.length;
-
   return (
     <div className="shell">
       <header className="hero">
         <div className="hero__brand">
-          <div className="brand-mark" aria-hidden="true">
-            <span className="brand-mark__core" />
-          </div>
           <div>
             <p className="eyebrow">Sparing Consulting</p>
             <h1 className="hero__title">Create a clean, client-ready org chart.</h1>
@@ -487,8 +304,8 @@ function App() {
             <strong>{peopleCount}</strong>
           </div>
           <div className="summary-chip">
-            <span className="summary-chip__label">Saved charts</span>
-            <strong>{savedCount}</strong>
+            <span className="summary-chip__label">Mapped fields</span>
+            <strong>{mappedCount} of 4</strong>
           </div>
           <div className="summary-chip summary-chip--status">
             <span className="summary-chip__label">Status</span>
@@ -498,106 +315,6 @@ function App() {
       </header>
 
       <main className="shell-main">
-        <section className="library card">
-          <button
-            className="accordion-header"
-            type="button"
-            onClick={() => setShowSavedAccordion((prev) => !prev)}
-            aria-expanded={showSavedAccordion}
-          >
-            <span>
-              <span className="section-kicker">Saved work</span>
-              <span className="accordion-title-text">
-                Open a saved chart or continue where you left off.
-              </span>
-            </span>
-            <span
-              className={
-                "accordion-chevron" +
-                (showSavedAccordion ? " accordion-chevron--open" : "")
-              }
-              aria-hidden="true"
-            >v</span>
-          </button>
-
-          {showSavedAccordion && (
-            <div className="accordion-body">
-              {isLoadingCompanies ? (
-                <p className="text-muted">Loading your saved charts...</p>
-              ) : savedCompanies.length === 0 ? (
-                <p className="text-muted">
-                  Your saved charts will appear here after you save one.
-                </p>
-              ) : (
-                <>
-                  <div className="saved-search-wrapper">
-                    <label className="sr-only" htmlFor="savedSearch">
-                      Search saved charts
-                    </label>
-                    <input
-                      id="savedSearch"
-                      type="text"
-                      className="input"
-                      placeholder="Search by company name"
-                      value={savedSearch}
-                      onChange={(e) => setSavedSearch(e.target.value)}
-                    />
-                  </div>
-                  {filteredSavedCompanies.length === 0 ? (
-                    <p className="text-muted text-small">
-                      No saved charts match that search.
-                    </p>
-                  ) : (
-                    <div className="saved-list">
-                      {filteredSavedCompanies.map((c) => (
-                        <article
-                          key={c.id}
-                          className={
-                            "saved-item" +
-                            (c.id === activeCompanyId ? " saved-item--active" : "")
-                          }
-                        >
-                          <div className="saved-item-main">
-                            <div className="saved-item-name">
-                              {c.name || "Untitled company"}
-                            </div>
-                            {c.updated_at && (
-                              <div className="saved-item-meta">
-                                Updated{" "}
-                                {new Date(c.updated_at).toLocaleString(undefined, {
-                                  dateStyle: "medium",
-                                  timeStyle: "short",
-                                })}
-                              </div>
-                            )}
-                          </div>
-                          <div className="saved-item-actions">
-                            <button
-                              className="btn btn-outline"
-                              type="button"
-                              onClick={() => handleLoadCompany(c.id)}
-                            >
-                              Open
-                            </button>
-                            <button
-                              className="btn btn-danger"
-                              type="button"
-                              disabled={isDeleting}
-                              onClick={() => handleDeleteCompany(c.id)}
-                            >
-                              {isDeleting ? "Removing..." : "Delete"}
-                            </button>
-                          </div>
-                        </article>
-                      ))}
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          )}
-        </section>
-
         <div className="workspace">
           <section className="workflow">
             <article className="card section-card">
@@ -854,18 +571,6 @@ function App() {
 
               <div className="action-bar">
                 <button
-                  className="btn btn-outline"
-                  type="button"
-                  onClick={handleSaveCompany}
-                  disabled={isSaving}
-                >
-                  {isSaving
-                    ? "Saving..."
-                    : activeCompanyId
-                      ? "Update saved chart"
-                      : "Save chart"}
-                </button>
-                <button
                   className="btn btn-primary"
                   type="button"
                   onClick={handleDownloadPDF}
@@ -887,8 +592,8 @@ function App() {
                   <strong>{readyToBuild ? "Ready to build" : "Needs attention"}</strong>
                 </div>
                 <div className="status-card">
-                  <span className="status-card__label">Saved version</span>
-                  <strong>{activeCompany ? activeCompany.name : "Not saved yet"}</strong>
+                  <span className="status-card__label">Export</span>
+                  <strong>{canExport ? "PDF ready" : "Finish setup first"}</strong>
                 </div>
               </div>
 
