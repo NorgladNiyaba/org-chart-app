@@ -1,9 +1,4 @@
-import React, {
-  useState,
-  useMemo,
-  useRef,
-  useEffect,
-} from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import Papa from "papaparse";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
@@ -12,34 +7,23 @@ import { supabase } from "./supabaseClient";
 function App() {
   const [rawRows, setRawRows] = useState([]);
   const [columns, setColumns] = useState([]);
-
   const [nameColumn, setNameColumn] = useState("");
   const [titleColumn, setTitleColumn] = useState("");
   const [idColumn, setIdColumn] = useState("");
   const [managerIdColumn, setManagerIdColumn] = useState("");
-
   const [companyName, setCompanyName] = useState("");
   const [logoDataUrl, setLogoDataUrl] = useState("");
   const [error, setError] = useState("");
-
   const [savedCompanies, setSavedCompanies] = useState([]);
   const [activeCompanyId, setActiveCompanyId] = useState(null);
-
   const [isLoadingCompanies, setIsLoadingCompanies] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-
   const [showSavedAccordion, setShowSavedAccordion] = useState(false);
   const [savedSearch, setSavedSearch] = useState("");
-
-  // new: chart theme
   const [chartTheme, setChartTheme] = useState("classic");
-
-  // chartRef now points to the inner wrapper that contains the full chart,
-  // not the scroll container, so the PDF captures everything.
   const chartRef = useRef(null);
 
-  // --- Load saved companies once from Supabase ---
   useEffect(() => {
     const fetchCompanies = async () => {
       setIsLoadingCompanies(true);
@@ -52,7 +36,7 @@ function App() {
 
         if (dbError) {
           console.error(dbError);
-          setError("Could not load saved companies.");
+          setError("We couldn't load your saved charts.");
           setSavedCompanies([]);
           return;
         }
@@ -60,7 +44,7 @@ function App() {
         setSavedCompanies(data || []);
       } catch (e) {
         console.error(e);
-        setError("Unexpected error loading companies.");
+        setError("Something went wrong while loading your saved charts.");
         setSavedCompanies([]);
       } finally {
         setIsLoadingCompanies(false);
@@ -70,7 +54,6 @@ function App() {
     fetchCompanies();
   }, []);
 
-  // --- CSV upload & parsing ---
   const handleFileUpload = (event) => {
     const file = event.target.files[0];
     if (!file) return;
@@ -83,7 +66,7 @@ function App() {
         const { data, errors, meta } = results;
 
         if (!data || data.length === 0) {
-          setError("The CSV appears to be empty.");
+          setError("This CSV looks empty.");
           return;
         }
 
@@ -97,7 +80,6 @@ function App() {
             ? meta.fields
             : Object.keys(data[0]);
 
-        // Handle the "everything in one column" case
         if (
           finalColumns.length === 1 &&
           typeof finalColumns[0] === "string" &&
@@ -123,28 +105,25 @@ function App() {
 
         setColumns(finalColumns);
         setRawRows(finalData);
-
         setNameColumn("");
         setTitleColumn("");
         setIdColumn("");
         setManagerIdColumn("");
-
         setActiveCompanyId(null);
       },
       error: (err) => {
         console.error("PapaParse error:", err);
-        setError("There was a problem parsing the CSV.");
+        setError("We couldn't read that file. Please try another CSV.");
       },
     });
   };
 
-  // --- Logo upload ---
   const handleLogoChange = (event) => {
     const file = event.target.files[0];
     if (!file) return;
 
     if (!file.type.startsWith("image/")) {
-      setError("Please upload an image file (PNG, JPG, etc.).");
+      setError("Please upload a logo image.");
       return;
     }
 
@@ -158,7 +137,7 @@ function App() {
     };
     reader.onerror = () => {
       console.error("Failed to read logo file");
-      setError("Failed to read logo file.");
+      setError("We couldn't read that logo file.");
     };
     reader.readAsDataURL(file);
   };
@@ -167,7 +146,6 @@ function App() {
     setLogoDataUrl("");
   };
 
-  // --- Build org tree structure ---
   const rootNodes = useMemo(() => {
     if (!rawRows.length || !nameColumn || !idColumn) {
       return [];
@@ -216,17 +194,40 @@ function App() {
       return roots;
     } catch (e) {
       console.error(e);
-      setError("Error while building the org chart.");
+      setError("We couldn't build the chart from this data.");
       return [];
     }
   }, [rawRows, nameColumn, titleColumn, idColumn, managerIdColumn]);
 
   const hasMappings = useMemo(
-    () => !!(nameColumn && idColumn),
+    () => Boolean(nameColumn && idColumn),
     [nameColumn, idColumn]
   );
 
-  // --- Inline table editing ---
+  const filteredSavedCompanies = useMemo(() => {
+    if (!savedSearch.trim()) return savedCompanies;
+    const q = savedSearch.toLowerCase();
+    return savedCompanies.filter((c) =>
+      (c.name || "").toLowerCase().includes(q)
+    );
+  }, [savedCompanies, savedSearch]);
+
+  const activeCompany = useMemo(
+    () => savedCompanies.find((company) => company.id === activeCompanyId) || null,
+    [activeCompanyId, savedCompanies]
+  );
+
+  const peopleCount = rawRows.length;
+  const readyToBuild = rawRows.length > 0 && hasMappings;
+  const canExport = rootNodes.length > 0 && hasMappings;
+  const completionLabel = !rawRows.length
+    ? "Start with your company details and CSV file."
+    : !hasMappings
+      ? "Match the right columns to continue."
+      : !rootNodes.length
+        ? "Review the data to make sure each person has a name and unique ID."
+        : "Your chart is ready to review and export.";
+
   const handleCellChange = (rowIndex, fieldType, value) => {
     setRawRows((prev) => {
       const next = [...prev];
@@ -246,16 +247,15 @@ function App() {
     });
   };
 
-  // --- Save / load / delete companies (Supabase) ---
   const handleSaveCompany = async () => {
     setError("");
 
     if (!companyName.trim()) {
-      setError("Enter a company name before saving.");
+      setError("Enter your company name before saving.");
       return;
     }
     if (!rawRows.length) {
-      setError("Upload and map a CSV before saving.");
+      setError("Upload your team CSV before saving.");
       return;
     }
 
@@ -288,7 +288,7 @@ function App() {
 
         if (dbError) {
           console.error(dbError);
-          setError("Could not update the company.");
+          setError("We couldn't update this chart.");
           return;
         }
         result = data;
@@ -301,7 +301,7 @@ function App() {
 
         if (dbError) {
           console.error(dbError);
-          setError("Could not save the company.");
+          setError("We couldn't save this chart.");
           return;
         }
         result = data;
@@ -319,7 +319,7 @@ function App() {
       setActiveCompanyId(result.id);
     } catch (e) {
       console.error(e);
-      setError("Unexpected error while saving.");
+      setError("Something went wrong while saving.");
     } finally {
       setIsSaving(false);
     }
@@ -333,12 +333,7 @@ function App() {
       return;
     }
 
-    const loadedRows =
-      company.raw_rows ||
-      company.rawRows ||
-      company.rows ||
-      [];
-
+    const loadedRows = company.raw_rows || company.rawRows || company.rows || [];
     const loadedColumns = company.columns || company.cols || [];
     const mappings = company.mappings || company.mapping || {};
 
@@ -346,13 +341,11 @@ function App() {
     setCompanyName(company.name || "");
     setRawRows(Array.isArray(loadedRows) ? loadedRows : []);
     setColumns(Array.isArray(loadedColumns) ? loadedColumns : []);
-
     setNameColumn(mappings.nameColumn || "");
     setTitleColumn(mappings.titleColumn || "");
     setIdColumn(mappings.idColumn || "");
     setManagerIdColumn(mappings.managerIdColumn || "");
     setLogoDataUrl(mappings.logoDataUrl || "");
-
     setShowSavedAccordion(true);
   };
 
@@ -367,7 +360,7 @@ function App() {
 
       if (dbError) {
         console.error(dbError);
-        setError("Could not delete the company.");
+        setError("We couldn't remove this saved chart.");
         return;
       }
 
@@ -377,22 +370,12 @@ function App() {
       }
     } catch (e) {
       console.error(e);
-      setError("Unexpected error while deleting.");
+      setError("Something went wrong while deleting.");
     } finally {
       setIsDeleting(false);
     }
   };
 
-  // --- Filter saved companies for search ---
-  const filteredSavedCompanies = useMemo(() => {
-    if (!savedSearch.trim()) return savedCompanies;
-    const q = savedSearch.toLowerCase();
-    return savedCompanies.filter((c) =>
-      (c.name || "").toLowerCase().includes(q)
-    );
-  }, [savedCompanies, savedSearch]);
-
-  // --- PDF export (uses full chartRef content) ---
   const handleDownloadPDF = async () => {
     if (!chartRef.current) return;
     try {
@@ -422,7 +405,6 @@ function App() {
       });
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
-
       const bottomMargin = 40;
       const sideMargin = 40;
 
@@ -437,7 +419,6 @@ function App() {
         const logoRatio = Math.min(maxLogoWidth / imgW, maxLogoHeight / imgH);
         const logoDrawWidth = imgW * logoRatio;
         const logoDrawHeight = imgH * logoRatio;
-
         const logoX = (pageWidth - logoDrawWidth) / 2;
         const logoY = headerTop;
 
@@ -463,37 +444,21 @@ function App() {
       pdf.text(titleText, pageWidth / 2, titleY, { align: "center" });
 
       const topMargin = titleY + 22;
-
       const maxWidth = pageWidth - sideMargin * 2;
       const maxHeight = pageHeight - topMargin - bottomMargin;
-
       const imgWidth = canvas.width;
       const imgHeight = canvas.height;
       const ratio = Math.min(maxWidth / imgWidth, maxHeight / imgHeight);
-
       const printWidth = imgWidth * ratio;
       const printHeight = imgHeight * ratio;
-
       const x = (pageWidth - printWidth) / 2;
       const y = topMargin;
 
       pdf.addImage(imageData, "PNG", x, y, printWidth, printHeight);
-
-      pdf.setFontSize(8);
-      pdf.setFont("helvetica", "normal");
-      pdf.setTextColor(130, 130, 130);
-      pdf.text(
-        "Powered by Sparing Consulting Inc.",
-        pageWidth / 2,
-        pageHeight - 18,
-        { align: "center" }
-      );
-      pdf.setTextColor(0, 0, 0);
-
       pdf.save("org-chart.pdf");
     } catch (e) {
       console.error(e);
-      setError("Failed to generate PDF.");
+      setError("We couldn't generate the PDF.");
     }
   };
 
@@ -501,72 +466,91 @@ function App() {
 
   return (
     <div className="shell">
-      {/* Top bar */}
-      <header className="shell-header">
-        <div className="logo-block">
-          <div className="logo-dot" />
-          <span className="logo-text">Sparing Consulting</span>
-          <span className="logo-separator">•</span>
-          <span className="logo-app-name">Org Chart Studio</span>
+      <header className="hero">
+        <div className="hero__brand">
+          <div className="brand-mark" aria-hidden="true">
+            <span className="brand-mark__core" />
+          </div>
+          <div>
+            <p className="eyebrow">Sparing Consulting</p>
+            <h1 className="hero__title">Create a clean, client-ready org chart.</h1>
+            <p className="hero__copy">
+              Add your company details, upload your team file, and export a polished
+              chart that is easy to share.
+            </p>
+          </div>
         </div>
-        <div className="header-right">
-          <span className="header-badge">Internal tool</span>
+
+        <div className="hero__summary" aria-label="Chart summary">
+          <div className="summary-chip">
+            <span className="summary-chip__label">People</span>
+            <strong>{peopleCount}</strong>
+          </div>
+          <div className="summary-chip">
+            <span className="summary-chip__label">Saved charts</span>
+            <strong>{savedCount}</strong>
+          </div>
+          <div className="summary-chip summary-chip--status">
+            <span className="summary-chip__label">Status</span>
+            <strong>{completionLabel}</strong>
+          </div>
         </div>
       </header>
 
-      {/* Main content */}
       <main className="shell-main">
-        {/* Saved companies accordion */}
-        <section className="card">
-          <div
+        <section className="library card">
+          <button
             className="accordion-header"
+            type="button"
             onClick={() => setShowSavedAccordion((prev) => !prev)}
+            aria-expanded={showSavedAccordion}
           >
-            <div className="accordion-title">
-              <div className="card-title-row">
-                <h2 className="card-title">Saved companies</h2>
-                <span className="pill pill-muted">
-                  {savedCount} {savedCount === 1 ? "company" : "companies"}
-                </span>
-              </div>
-            </div>
+            <span>
+              <span className="section-kicker">Saved work</span>
+              <span className="accordion-title-text">
+                Open a saved chart or continue where you left off.
+              </span>
+            </span>
             <span
               className={
                 "accordion-chevron" +
                 (showSavedAccordion ? " accordion-chevron--open" : "")
               }
-            >
-              ▾
-            </span>
-          </div>
+              aria-hidden="true"
+            >v</span>
+          </button>
 
           {showSavedAccordion && (
             <div className="accordion-body">
               {isLoadingCompanies ? (
-                <p className="text-muted">Loading from Supabase…</p>
+                <p className="text-muted">Loading your saved charts...</p>
               ) : savedCompanies.length === 0 ? (
                 <p className="text-muted">
-                  Save a company after building a chart to access it here.
+                  Your saved charts will appear here after you save one.
                 </p>
               ) : (
                 <>
                   <div className="saved-search-wrapper">
+                    <label className="sr-only" htmlFor="savedSearch">
+                      Search saved charts
+                    </label>
                     <input
+                      id="savedSearch"
                       type="text"
                       className="input"
-                      placeholder="Search by name…"
+                      placeholder="Search by company name"
                       value={savedSearch}
                       onChange={(e) => setSavedSearch(e.target.value)}
                     />
                   </div>
                   {filteredSavedCompanies.length === 0 ? (
                     <p className="text-muted text-small">
-                      No companies match that search.
+                      No saved charts match that search.
                     </p>
                   ) : (
                     <div className="saved-list">
                       {filteredSavedCompanies.map((c) => (
-                        <div
+                        <article
                           key={c.id}
                           className={
                             "saved-item" +
@@ -579,8 +563,9 @@ function App() {
                             </div>
                             {c.updated_at && (
                               <div className="saved-item-meta">
+                                Updated{" "}
                                 {new Date(c.updated_at).toLocaleString(undefined, {
-                                  dateStyle: "short",
+                                  dateStyle: "medium",
                                   timeStyle: "short",
                                 })}
                               </div>
@@ -592,7 +577,7 @@ function App() {
                               type="button"
                               onClick={() => handleLoadCompany(c.id)}
                             >
-                              Load
+                              Open
                             </button>
                             <button
                               className="btn btn-danger"
@@ -600,10 +585,10 @@ function App() {
                               disabled={isDeleting}
                               onClick={() => handleDeleteCompany(c.id)}
                             >
-                              {isDeleting ? "Deleting…" : "Delete"}
+                              {isDeleting ? "Removing..." : "Delete"}
                             </button>
                           </div>
-                        </div>
+                        </article>
                       ))}
                     </div>
                   )}
@@ -613,20 +598,23 @@ function App() {
           )}
         </section>
 
-        {/* Main two-column layout */}
-        <div className="grid-main">
-          {/* Left column */}
-          <div className="grid-col">
-            {/* Company block */}
-            <section className="card">
-              <div className="card-title-row">
-                <h2 className="card-title">Company</h2>
+        <div className="workspace">
+          <section className="workflow">
+            <article className="card section-card">
+              <div className="section-heading">
+                <div>
+                  <span className="section-step">Step 1</span>
+                  <h2 className="section-title">Company details</h2>
+                </div>
+                <p className="section-copy">
+                  Add the company name and logo that should appear on the chart.
+                </p>
               </div>
 
               <div className="company-grid">
                 <div className="field">
                   <label htmlFor="companyName" className="label">
-                    Name
+                    Company name
                   </label>
                   <input
                     id="companyName"
@@ -649,6 +637,7 @@ function App() {
                     onChange={handleLogoChange}
                     className="input-file"
                   />
+                  <p className="field-note">Use a PNG or JPG for the clearest export.</p>
                   {logoDataUrl && (
                     <div className="logo-preview-wrapper">
                       <img
@@ -661,67 +650,74 @@ function App() {
                         className="btn-link"
                         onClick={clearLogo}
                       >
-                        Remove
+                        Remove logo
                       </button>
                     </div>
                   )}
                 </div>
               </div>
-            </section>
+            </article>
 
-            {/* Data import + mapping */}
-            <section className="card">
-              <div className="card-title-row">
-                <h2 className="card-title">People data</h2>
-                <span className="pill pill-soft">CSV</span>
-              </div>
-
-              <div className="field stack-sm">
-                <label className="label">Upload CSV</label>
-                <input
-                  type="file"
-                  accept=".csv"
-                  onChange={handleFileUpload}
-                  className="input-file"
-                />
-                <div className="text-muted text-small">
-                  Expected columns: <span className="code">ID</span>,{" "}
-                  <span className="code">ManagerID</span>,{" "}
-                  <span className="code">Name</span>,{" "}
-                  <span className="code">Title</span> (optional).
+            <article className="card section-card">
+              <div className="section-heading">
+                <div>
+                  <span className="section-step">Step 2</span>
+                  <h2 className="section-title">Upload your team file</h2>
                 </div>
-                {rawRows.length > 0 && (
-                  <div className="text-muted text-small">
-                    Loaded <strong>{rawRows.length}</strong> rows.
-                  </div>
-                )}
+                <p className="section-copy">
+                  Import a CSV that includes each person's name, unique ID, and manager.
+                </p>
               </div>
 
-              <div className="divider" />
+              <div className="upload-panel">
+                <div className="field stack-sm">
+                  <label className="label" htmlFor="peopleCsv">
+                    Team CSV
+                  </label>
+                  <input
+                    id="peopleCsv"
+                    type="file"
+                    accept=".csv"
+                    onChange={handleFileUpload}
+                    className="input-file"
+                  />
+                  <p className="field-note">
+                    Typical columns include ID, Manager ID, Name, and Title.
+                  </p>
+                  {rawRows.length > 0 && (
+                    <div className="upload-stats">
+                      <span className="pill pill-soft">{rawRows.length} rows loaded</span>
+                      <span className="text-muted text-small">
+                        Match the columns below to build the chart.
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
 
               <div className="mapping-grid">
                 <ColumnSelector
-                  label="Name column"
+                  label="Name"
                   required
                   value={nameColumn}
                   onChange={setNameColumn}
                   columns={columns}
                 />
                 <ColumnSelector
-                  label="Title column"
+                  label="Title"
                   value={titleColumn}
                   onChange={setTitleColumn}
                   columns={columns}
                 />
                 <ColumnSelector
-                  label="ID column"
+                  label="Employee ID"
                   required
                   value={idColumn}
                   onChange={setIdColumn}
                   columns={columns}
                 />
                 <ColumnSelector
-                  label="Manager ID column"
+                  label="Manager ID"
                   value={managerIdColumn}
                   onChange={setManagerIdColumn}
                   columns={columns}
@@ -729,30 +725,33 @@ function App() {
               </div>
               {!hasMappings && rawRows.length > 0 && (
                 <p className="text-error">
-                  Map at least a Name and ID column to build the chart.
+                  Select a name column and an employee ID column to continue.
                 </p>
               )}
-            </section>
+            </article>
 
-            {/* Table editing */}
-            <section className="card">
-              <div className="card-title-row">
-                <h2 className="card-title">Table view</h2>
+            <article className="card section-card">
+              <div className="section-heading section-heading--compact">
+                <div>
+                  <span className="section-step">Step 3</span>
+                  <h2 className="section-title">Review the people list</h2>
+                </div>
+                <p className="section-copy">
+                  Make quick edits before you save or export the final chart.
+                </p>
               </div>
 
               {rawRows.length === 0 ? (
-                <p className="text-muted">
-                  Upload a CSV to review and edit rows.
-                </p>
+                <p className="text-muted">Upload your CSV to review the people list.</p>
               ) : !hasMappings ? (
                 <p className="text-muted">
-                  Map Name and ID to edit in a structured table.
+                  Match the required columns above to edit the list.
                 </p>
               ) : (
                 <>
-                  <div className="text-muted text-small mb-2">
-                    Edit cells inline. Changes apply immediately.
-                  </div>
+                  <p className="field-note">
+                    Changes made here update the chart immediately.
+                  </p>
                   <div className="table-wrapper">
                     <table className="data-table">
                       <thead>
@@ -792,16 +791,10 @@ function App() {
                                   className="cell-input"
                                   value={managerValue}
                                   onChange={(e) =>
-                                    handleCellChange(
-                                      index,
-                                      "manager",
-                                      e.target.value
-                                    )
+                                    handleCellChange(index, "manager", e.target.value)
                                   }
                                   disabled={!managerIdColumn}
-                                  placeholder={
-                                    !managerIdColumn ? "—" : ""
-                                  }
+                                  placeholder={!managerIdColumn ? "-" : ""}
                                 />
                               </td>
                               <td>
@@ -821,7 +814,7 @@ function App() {
                                     handleCellChange(index, "title", e.target.value)
                                   }
                                   disabled={!titleColumn}
-                                  placeholder={!titleColumn ? "—" : ""}
+                                  placeholder={!titleColumn ? "-" : ""}
                                 />
                               </td>
                             </tr>
@@ -832,62 +825,90 @@ function App() {
                   </div>
                 </>
               )}
-            </section>
-          </div>
+            </article>
+          </section>
 
-          {/* Right column: chart + actions */}
-          <div className="grid-col">
-            <section className="card card-chart">
-              <div className="card-title-row">
-                <h2 className="card-title">Org chart</h2>
-                <div className="card-title-actions">
-                  <div className="field chart-theme-field">
-                    <label className="label">Style</label>
-                    <select
-                      className="select select-sm"
-                      value={chartTheme}
-                      onChange={(e) => setChartTheme(e.target.value)}
-                    >
-                      <option value="classic">Classic</option>
-                      <option value="arrowed">Arrowed</option>
-                      <option value="dashed">Dashed</option>
-                    </select>
-                  </div>
-                  <button
-                    className="btn btn-outline"
-                    type="button"
-                    onClick={handleSaveCompany}
-                    disabled={isSaving}
+          <aside className="preview-column">
+            <section className="card preview-card">
+              <div className="preview-topbar">
+                <div>
+                  <span className="section-kicker">Preview</span>
+                  <h2 className="section-title">Organizational chart</h2>
+                </div>
+                <div className="field chart-theme-field">
+                  <label className="label" htmlFor="chartTheme">
+                    Style
+                  </label>
+                  <select
+                    id="chartTheme"
+                    className="select select-sm"
+                    value={chartTheme}
+                    onChange={(e) => setChartTheme(e.target.value)}
                   >
-                    {isSaving
-                      ? "Saving…"
-                      : activeCompanyId
-                      ? "Update company"
-                      : "Save company"}
-                  </button>
-                  <button
-                    className="btn btn-primary"
-                    type="button"
-                    onClick={handleDownloadPDF}
-                    disabled={!rootNodes.length || !hasMappings}
-                  >
-                    Export PDF
-                  </button>
+                    <option value="classic">Classic</option>
+                    <option value="arrowed">Arrowed</option>
+                    <option value="dashed">Dashed</option>
+                  </select>
                 </div>
               </div>
 
-              {error && <p className="text-error mb-2">{error}</p>}
+              <div className="action-bar">
+                <button
+                  className="btn btn-outline"
+                  type="button"
+                  onClick={handleSaveCompany}
+                  disabled={isSaving}
+                >
+                  {isSaving
+                    ? "Saving..."
+                    : activeCompanyId
+                      ? "Update saved chart"
+                      : "Save chart"}
+                </button>
+                <button
+                  className="btn btn-primary"
+                  type="button"
+                  onClick={handleDownloadPDF}
+                  disabled={!canExport}
+                >
+                  Export PDF
+                </button>
+              </div>
+
+              {error && <p className="text-error">{error}</p>}
+
+              <div className="preview-status">
+                <div className="status-card">
+                  <span className="status-card__label">Company</span>
+                  <strong>{companyName || "Add company details"}</strong>
+                </div>
+                <div className="status-card">
+                  <span className="status-card__label">Data</span>
+                  <strong>{readyToBuild ? "Ready to build" : "Needs attention"}</strong>
+                </div>
+                <div className="status-card">
+                  <span className="status-card__label">Saved version</span>
+                  <strong>{activeCompany ? activeCompany.name : "Not saved yet"}</strong>
+                </div>
+              </div>
 
               {!rawRows.length && (
-                <p className="text-muted">
-                  Upload data and map columns to render a chart.
-                </p>
+                <div className="empty-state">
+                  <h3>Start by uploading your people file.</h3>
+                  <p>
+                    Once your data is mapped, the chart preview will appear here.
+                  </p>
+                </div>
               )}
 
               {rawRows.length > 0 && !rootNodes.length && hasMappings && (
-                <p className="text-error">
-                  No valid nodes could be built. Check for missing IDs or Names.
-                </p>
+                <div className="empty-state empty-state--warning">
+                  <h3>We couldn't build the chart yet.</h3>
+                  <p>
+                    Check that each row includes a name and a unique ID, then review
+                    manager relationships.
+                  </p>
+                </div>
               )}
 
               {rootNodes.length > 0 && hasMappings && (
@@ -900,21 +921,16 @@ function App() {
                         className="chart-logo"
                       />
                     )}
-                    {companyName ? (
+                    <div className="chart-heading__text">
+                      <span className="section-kicker">Ready to share</span>
                       <h3 className="chart-title-text">
-                        {companyName} Organizational Chart
+                        {companyName ? `${companyName} Organizational Chart` : "Organizational Chart"}
                       </h3>
-                    ) : (
-                      <h3 className="chart-title-text">Organizational Chart</h3>
-                    )}
+                    </div>
                   </div>
 
-                  {/* Scroll container for UI; inner wrapper used for PDF capture */}
                   <div className="chart-scroll">
-                    <div
-                      className={`chart-wrapper theme-${chartTheme}`}
-                      ref={chartRef}
-                    >
+                    <div className={`chart-wrapper theme-${chartTheme}`} ref={chartRef}>
                       <div className="chart-container">
                         {rootNodes.map((root) => (
                           <OrgNode key={root.id} node={root} />
@@ -925,7 +941,7 @@ function App() {
                 </>
               )}
             </section>
-          </div>
+          </aside>
         </div>
       </main>
     </div>
@@ -943,7 +959,7 @@ function ColumnSelector({ label, required = false, value, onChange, columns }) {
         onChange={(e) => onChange(e.target.value)}
         className="select"
       >
-        <option value="">Not mapped</option>
+        <option value="">Select a column</option>
         {columns.map((col) => (
           <option key={col} value={col}>
             {col}
