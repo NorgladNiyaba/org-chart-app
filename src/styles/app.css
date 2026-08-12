@@ -274,6 +274,95 @@
   border-color: var(--primary);
 }
 
+/* ── START OPTIONS ───────────────────────────────────────────── */
+.start-options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+  margin-top: var(--s5);
+  padding-top: var(--s5);
+  border-top: 1px solid var(--border);
+}
+.start-options--compact {
+  margin-top: var(--s4);
+  padding-top: var(--s4);
+}
+.template-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  flex-wrap: wrap;
+}
+.template-row__label {
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.confirm-inline {
+  align-items: flex-start;
+}
+
+.sheet-picker {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  flex-wrap: wrap;
+  margin-top: var(--s3);
+  padding: var(--s3) var(--s4);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-2);
+}
+.sheet-picker svg {
+  width: 15px;
+  height: 15px;
+  color: var(--text-3);
+  flex-shrink: 0;
+}
+.sheet-picker__label {
+  font-size: 12px;
+  color: var(--text-2);
+}
+.sheet-picker__select {
+  font-family: var(--font-body);
+  font-size: 13px;
+  padding: 5px var(--s3);
+  border-radius: var(--r-sm);
+  border: 1.5px solid var(--border-mid);
+  background: var(--bg);
+  color: var(--text-1);
+  cursor: pointer;
+  outline: none;
+}
+.sheet-picker__select:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-faint);
+}
+
+.row-actions {
+  width: 1%;
+  white-space: nowrap;
+  text-align: right;
+}
+.row-actions .btn-icon {
+  width: 30px;
+  height: 30px;
+}
+.row-actions .btn-icon:hover {
+  background: var(--danger-faint);
+  border-color: rgba(245, 64, 90, 0.35);
+}
+.row-actions .btn-icon:hover svg {
+  stroke: var(--danger);
+}
+
+.inspector__actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  align-items: flex-start;
+}
+
 /* ── PASTE ───────────────────────────────────────────────────── */
 .paste-panel {
   display: flex;

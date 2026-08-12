@@ -32,27 +32,14 @@ function isBlankRow(cells) {
   return cells.every((cell) => String(cell ?? "").trim() === "");
 }
 
-export function parseCsvText(text) {
-  let result = Papa.parse(text, { header: false, skipEmptyLines: "greedy" });
-
-  // One column whose header still contains a delimiter means the guess was wrong.
-  const headerRow = result.data[0];
-  if (headerRow && headerRow.length === 1) {
-    const fallback = DELIMITERS.find(
-      (d) => d !== result.meta.delimiter && String(headerRow[0]).includes(d)
-    );
-    if (fallback) {
-      result = Papa.parse(text, {
-        header: false,
-        skipEmptyLines: "greedy",
-        delimiter: fallback,
-      });
-    }
-  }
-
-  const [rawHeader, ...bodyRows] = result.data;
+/**
+ * Rows-of-cells to the shape the app works in. Shared with the spreadsheet
+ * reader so a CSV and an .xlsx of the same data produce identical results.
+ */
+export function tableFromMatrix(matrix) {
+  const [rawHeader, ...bodyRows] = matrix;
   if (!rawHeader || !rawHeader.length) {
-    return { columns: [], rows: [], delimiter: result.meta.delimiter, warnings: [] };
+    return { columns: [], rows: [], warnings: [] };
   }
 
   const columns = uniqueHeaders(rawHeader);
@@ -76,7 +63,28 @@ export function parseCsvText(text) {
     );
   }
 
-  return { columns, rows, delimiter: result.meta.delimiter, warnings };
+  return { columns, rows, warnings };
+}
+
+export function parseCsvText(text) {
+  let result = Papa.parse(text, { header: false, skipEmptyLines: "greedy" });
+
+  // One column whose header still contains a delimiter means the guess was wrong.
+  const headerRow = result.data[0];
+  if (headerRow && headerRow.length === 1) {
+    const fallback = DELIMITERS.find(
+      (d) => d !== result.meta.delimiter && String(headerRow[0]).includes(d)
+    );
+    if (fallback) {
+      result = Papa.parse(text, {
+        header: false,
+        skipEmptyLines: "greedy",
+        delimiter: fallback,
+      });
+    }
+  }
+
+  return { ...tableFromMatrix(result.data), delimiter: result.meta.delimiter };
 }
 
 export async function parseCsvFile(file) {

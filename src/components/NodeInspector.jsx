@@ -29,7 +29,16 @@ function IconSwatch({ name, active, color, onSelect }) {
   );
 }
 
-function NodeInspector({ card, palette, override, defaultGrouped = true, onChange, onClear, onClose }) {
+function NodeInspector({
+  card,
+  palette,
+  override,
+  defaultGrouped = true,
+  onChange,
+  onClear,
+  onClose,
+  onAddReport,
+}) {
   const primaryId = useId();
   const secondaryId = useId();
 
@@ -158,12 +167,25 @@ function NodeInspector({ card, palette, override, defaultGrouped = true, onChang
         </label>
       )}
 
-      {hasOverrides && (
-        <button type="button" className="btn btn-ghost btn-sm" onClick={onClear}>
-          <Icon name="refresh" />
-          Reset to detected values
-        </button>
-      )}
+      <div className="inspector__actions">
+        {!isTeam && onAddReport && (
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={() => onAddReport(card)}
+          >
+            <Icon name="userPlus" />
+            Add a report
+          </button>
+        )}
+
+        {hasOverrides && (
+          <button type="button" className="btn btn-ghost btn-sm" onClick={onClear}>
+            <Icon name="refresh" />
+            Reset to detected values
+          </button>
+        )}
+      </div>
     </div>
   );
 }

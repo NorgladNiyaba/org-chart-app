@@ -1,9 +1,15 @@
 import { useCallback, useEffect, useId, useMemo, useReducer, useState } from "react";
 import { parseCsvFile, parseCsvText } from "./lib/parseCsv.js";
+import { readWorkbook, bestSheet } from "./lib/readXlsx.js";
 import { buildTree, summariseIssues, SEVERITY } from "./lib/buildTree.js";
 import { autoMapColumns } from "./lib/autoMap.js";
 import { exportChartToPdf } from "./lib/chart/exportPdf.js";
 import { historyReducer, initialState } from "./state/documentReducer.js";
+import {
+  TEMPLATE_COLUMNS,
+  blankRows,
+  templateRowObjects,
+} from "./lib/template.js";
 import { useTheme } from "./hooks/useTheme.js";
 import { useReveal } from "./hooks/useReveal.js";
 import { useChartLayout, useElementWidth } from "./hooks/useChartLayout.js";
@@ -15,6 +21,7 @@ import IssuesPanel from "./components/IssuesPanel.jsx";
 import NodeInspector from "./components/NodeInspector.jsx";
 import PasteData from "./components/PasteData.jsx";
 import PeopleTable from "./components/PeopleTable.jsx";
+import StartOptions from "./components/StartOptions.jsx";
 import TopBar from "./components/TopBar.jsx";
 
 /** Below this the type gets too small to read; the paper scrolls instead. */
@@ -35,6 +42,8 @@ function App() {
   const [roleFirst, setRoleFirst] = useState(true);
   const [error, setError] = useState("");
   const [isExporting, setIsExporting] = useState(false);
+  const [sheets, setSheets] = useState(null);
+  const [activeSheet, setActiveSheet] = useState("");
 
   const companyId = useId();
   const { theme, toggleTheme } = useTheme();
@@ -53,19 +62,76 @@ function App() {
     setCollapsed({});
   }, []);
 
-  const handleCsvFile = async (file) => {
+  const startFrom = useCallback((rows, label) => {
+    dispatch({
+      type: "start-blank",
+      columns: TEMPLATE_COLUMNS,
+      rows,
+      mapping: {
+        id: "Employee ID",
+        managerId: "Manager ID",
+        name: "Name",
+        title: "Job Title",
+      },
+      label,
+    });
+    setSelectedId(null);
+    setCollapsed({});
     setError("");
+  }, []);
+
+  const handleStartBlank = () => {
+    setSheets(null);
+    startFrom(blankRows(), "Built by hand");
+  };
+  const handleUseSample = () => {
+    setSheets(null);
+    startFrom(templateRowObjects(), "Sample org");
+  };
+
+  const handleDataFile = async (file) => {
+    setError("");
+    setSheets(null);
+
+    const isWorkbook = /\.xlsx$/i.test(file.name);
+
     try {
+      if (isWorkbook) {
+        const { sheets: parsedSheets } = await readWorkbook(file);
+        const withRows = parsedSheets.filter((sheet) => sheet.rows.length);
+
+        if (!withRows.length) {
+          setError("Every sheet in that workbook is empty.");
+          return;
+        }
+
+        // Workbooks often open on a cover tab, so offer the choice rather than
+        // silently reading whichever sheet happens to be first.
+        if (withRows.length > 1) setSheets({ fileName: file.name, list: withRows });
+
+        const sheet = bestSheet(withRows);
+        setActiveSheet(sheet.name);
+        loadTable(sheet, `${file.name}${withRows.length > 1 ? ` · ${sheet.name}` : ""}`);
+        return;
+      }
+
       const parsed = await parseCsvFile(file);
       if (!parsed.rows.length) {
-        setError("That CSV has a header but no rows.");
+        setError("That file has a header but no rows.");
         return;
       }
       loadTable(parsed, file.name);
     } catch (e) {
       console.error(e);
-      setError("We couldn't read that file. Please try another CSV.");
+      setError(e.message || "We couldn't read that file. Please try another one.");
     }
+  };
+
+  const handleSheetChange = (name) => {
+    const sheet = sheets?.list.find((item) => item.name === name);
+    if (!sheet) return;
+    setActiveSheet(name);
+    loadTable(sheet, `${sheets.fileName} · ${name}`);
   };
 
   const handlePaste = (text) => {
@@ -254,8 +320,8 @@ function App() {
               <em>built from your file.</em>
             </h1>
             <p style={{ fontSize: 15, color: "var(--text-2)", maxWidth: 420, lineHeight: 1.7, marginTop: "var(--s4)" }}>
-              Upload or paste your team list, check the columns we matched, and export a
-              chart you can put in front of a client.
+              Upload a spreadsheet, paste a table, or type people in directly — then
+              export a chart you can put in front of a client.
             </p>
           </div>
 
@@ -367,21 +433,49 @@ function App() {
             <span className="cell-tag">Data</span>
             <h2 className="cell-title cell-title-sm">Team file</h2>
             <p className="cell-body mb4">
-              One row per person. Comma, semicolon and tab files all work.
+              One row per person. Excel workbooks, or CSV with commas, semicolons or tabs.
             </p>
 
             <FileDrop
-              accept=".csv,text/csv"
+              accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
               icon="upload"
-              title="Drop your CSV here"
+              title="Drop your CSV or Excel file here"
               hint="or click to choose a file"
               fileName={doc.csvFileName}
-              onFile={handleCsvFile}
+              onFile={handleDataFile}
             />
+
+            {sheets && (
+              <div className="sheet-picker">
+                <Icon name="grid" />
+                <span className="sheet-picker__label">
+                  {sheets.list.length} sheets in this workbook — reading
+                </span>
+                <select
+                  className="sheet-picker__select"
+                  value={activeSheet}
+                  onChange={(e) => handleSheetChange(e.target.value)}
+                  aria-label="Sheet to read"
+                >
+                  {sheets.list.map((sheet) => (
+                    <option key={sheet.name} value={sheet.name}>
+                      {sheet.name} ({sheet.rows.length} rows)
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             <div style={{ marginTop: "var(--s3)" }}>
               <PasteData onSubmit={handlePaste} />
             </div>
+
+            <StartOptions
+              compact={hasRows}
+              peopleCount={doc.rows.length}
+              onStartBlank={handleStartBlank}
+              onUseSample={handleUseSample}
+            />
 
             {hasRows && (
               <>
@@ -472,7 +566,7 @@ function App() {
               <div className="empty">
                 <div className="empty__title">No chart yet</div>
                 <p className="empty__body">
-                  Upload or paste a team list above and the chart will appear here.
+                  Upload a file, paste a table, or start from scratch above.
                 </p>
               </div>
             )}
@@ -637,6 +731,9 @@ function App() {
                 }
                 onClear={() => dispatch({ type: "clear-override", id: selectedCard.id })}
                 onClose={() => setSelectedId(null)}
+                onAddReport={(card) =>
+                  dispatch({ type: "add-row", managerId: card.sourceId })
+                }
               />
             </div>
           )}
@@ -669,6 +766,10 @@ function App() {
                   mapping={doc.mapping}
                   onCellChange={(rowIndex, field, value) =>
                     dispatch({ type: "edit-cell", rowIndex, field, value })
+                  }
+                  onAddRow={() => dispatch({ type: "add-row" })}
+                  onDeleteRow={(rowIndex) =>
+                    dispatch({ type: "delete-rows", rowIndexes: [rowIndex] })
                   }
                 />
               </div>

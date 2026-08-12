@@ -1,4 +1,6 @@
-function PeopleTable({ rows, mapping, onCellChange }) {
+import Icon from "./Icon.jsx";
+
+function PeopleTable({ rows, mapping, onCellChange, onAddRow, onDeleteRow }) {
   const {
     id: idColumn,
     name: nameColumn,
@@ -17,7 +19,13 @@ function PeopleTable({ rows, mapping, onCellChange }) {
     <div className="table-wrap">
       <div className="table-toolbar">
         <span className="table-title">People</span>
-        <span className="badge badge-neutral badge-pill">{rows.length} rows</span>
+        <div className="row" style={{ gap: "var(--s2)" }}>
+          <span className="badge badge-neutral badge-pill">{rows.length} rows</span>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={onAddRow}>
+            <Icon name="plus" />
+            Add person
+          </button>
+        </div>
       </div>
       <div className="table-scroll">
         <table>
@@ -26,6 +34,7 @@ function PeopleTable({ rows, mapping, onCellChange }) {
               {fields.map((field) => (
                 <th key={field.key}>{field.header}</th>
               ))}
+              <th aria-label="Actions" />
             </tr>
           </thead>
           <tbody>
@@ -43,6 +52,17 @@ function PeopleTable({ rows, mapping, onCellChange }) {
                     />
                   </td>
                 ))}
+                <td className="row-actions">
+                  <button
+                    type="button"
+                    className="btn btn-icon btn-sm"
+                    onClick={() => onDeleteRow(index)}
+                    title="Remove this person — their reports move up to their manager"
+                    aria-label={`Remove row ${index + 1}`}
+                  >
+                    <Icon name="trash" />
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>

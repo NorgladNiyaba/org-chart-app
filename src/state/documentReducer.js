@@ -30,8 +30,16 @@ export const initialState = {
 
 const HISTORY_LIMIT = 50;
 
+/** Smallest unused positive integer, so hand-added people get tidy IDs. */
+function nextId(rows, idColumn) {
+  const used = new Set(rows.map((row) => String(row[idColumn] ?? "").trim()));
+  let candidate = 1;
+  while (used.has(String(candidate))) candidate += 1;
+  return String(candidate);
+}
+
 /** Actions that replace the whole document start a fresh history. */
-const RESETTING = new Set(["load-data", "reset"]);
+const RESETTING = new Set(["load-data", "reset", "start-blank"]);
 
 /** Actions that change presentation but aren't worth an undo step of their own. */
 const TRANSIENT = new Set(["set-branding", "set-logo"]);
@@ -51,6 +59,63 @@ function documentReducer(doc, action) {
 
     case "set-mapping":
       return { ...doc, mapping: { ...doc.mapping, [action.field]: action.value } };
+
+    case "add-row": {
+      const { id: idColumn, managerId: managerColumn } = doc.mapping;
+      if (!idColumn) return doc;
+
+      const row = Object.fromEntries(doc.columns.map((column) => [column, ""]));
+      row[idColumn] = nextId(doc.rows, idColumn);
+      if (managerColumn && action.managerId) row[managerColumn] = action.managerId;
+      if (doc.mapping.name && action.name) row[doc.mapping.name] = action.name;
+
+      return { ...doc, rows: [...doc.rows, row] };
+    }
+
+    case "delete-rows": {
+      const { id: idColumn, managerId: managerColumn } = doc.mapping;
+      const doomed = new Set(action.rowIndexes);
+      if (!doomed.size) return doc;
+
+      // Reports of a deleted person move up to their manager rather than being
+      // scattered to the top level.
+      const reassign = new Map();
+      if (idColumn && managerColumn) {
+        action.rowIndexes.forEach((rowIndex) => {
+          const row = doc.rows[rowIndex];
+          if (row) reassign.set(String(row[idColumn] ?? ""), String(row[managerColumn] ?? ""));
+        });
+      }
+
+      const resolve = (managerId, seen = new Set()) => {
+        if (!reassign.has(managerId) || seen.has(managerId)) return managerId;
+        seen.add(managerId);
+        return resolve(reassign.get(managerId), seen);
+      };
+
+      const rows = doc.rows
+        .filter((_, index) => !doomed.has(index))
+        .map((row) => {
+          if (!managerColumn) return row;
+          const managerId = String(row[managerColumn] ?? "");
+          if (!reassign.has(managerId)) return row;
+          return { ...row, [managerColumn]: resolve(managerId) };
+        });
+
+      return { ...doc, rows };
+    }
+
+    case "start-blank":
+      return {
+        ...emptyDocument,
+        companyName: doc.companyName,
+        logoDataUrl: doc.logoDataUrl,
+        logoFileName: doc.logoFileName,
+        columns: action.columns,
+        rows: action.rows,
+        mapping: action.mapping,
+        csvFileName: action.label ?? "",
+      };
 
     case "edit-cell": {
       const column = doc.mapping[action.field];
