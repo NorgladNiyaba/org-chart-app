@@ -1,0 +1,120 @@
+/*
+ * Plexa One · Design System v5 — token layer.
+ * Copied from the design system source; do not drift from it locally. Anything
+ * this app needs that v5 doesn't define belongs in app.css, not here.
+ *
+ * The one documented extension is --cat-*: a categorical ramp for org chart
+ * branches. v5 has no categorical palette, and its semantic colors are reserved
+ * (success is for positive status only, mint is never success), so departments
+ * cannot borrow them. See app.css for how the ramp is applied.
+ */
+
+:root {
+  --mint:          #00E5B0;
+  --mint-dim:      #00C899;
+  --mint-faint:    rgba(0,229,176,.10);
+  --mint-glow:     rgba(0,229,176,.20);
+  --blue:          #1A4BDB;
+  --blue-dim:      #1540C0;
+  --blue-faint:    rgba(26,75,219,.10);
+  --blue-glow:     rgba(26,75,219,.20);
+  --success:       #10B981;
+  --success-faint: rgba(16,185,129,.10);
+  --warning:       #F59E0B;
+  --warning-faint: rgba(245,158,11,.10);
+  --danger:        #F5405A;
+  --danger-faint:  rgba(245,64,90,.10);
+  --info-dark:     #7DA4FF;
+
+  --r-xs:3px; --r-sm:5px; --r-md:9px;
+  --r-lg:12px; --r-xl:16px; --r-2xl:22px; --r-pill:9999px;
+
+  --font-display: 'Artific','Inter',sans-serif;
+  --font-body:    'Inter',sans-serif;
+  --font-mono:    'DM Mono',monospace;
+
+  --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:20px;
+  --s6:24px;--s8:32px;--s10:40px;--s12:48px;--s16:64px;--s20:80px;
+
+  --t-fast:   120ms ease;
+  --t-base:   220ms ease;
+  --t-slow:   380ms ease;
+  --t-spring: 320ms cubic-bezier(.34,1.56,.64,1);
+  --t-smooth: 400ms cubic-bezier(.4,0,.2,1);
+
+  --gap: 14px;
+
+  /*
+   * Categorical ramp — v5.1 extension. Fixed order, never cycled; a branch past
+   * the seventh folds to the neutral slot rather than getting a generated hue.
+   * Validated on a white print surface: worst adjacent-pair separation ΔE 15.6
+   * under deuteranopia, 21.9 under normal vision. Print-safe and theme-independent
+   * by design — the exported chart always renders on white paper.
+   *
+   * --cat-N paints marks (icon tile, border, panel heading).
+   * --cat-N-ink paints text; three hues need a darker step to clear 4.5:1.
+   */
+  --cat-1:      #0E9E7E; --cat-1-ink: #0B7F65;
+  --cat-2:      #1A4BDB; --cat-2-ink: #1A4BDB;
+  --cat-3:      #E0701F; --cat-3-ink: #B0561A;
+  --cat-4:      #C4318F; --cat-4-ink: #C4318F;
+  --cat-5:      #A07800; --cat-5-ink: #8A6600;
+  --cat-6:      #6E56CF; --cat-6-ink: #6E56CF;
+  --cat-7:      #C0392B; --cat-7-ink: #C0392B;
+  --cat-none:   #5A6E8A; --cat-none-ink: #5A6E8A;
+}
+
+[data-theme="light"] {
+  --bg:          #F8F9FC;
+  --bg-2:        #FFFFFF;
+  --bg-3:        #EEF1F8;
+  --bg-4:        #E4E9F4;
+  --bg-raised:   #FFFFFF;
+  --border:      rgba(0,0,0,.07);
+  --border-mid:  rgba(0,0,0,.12);
+  --border-hi:   rgba(0,0,0,.22);
+  --text-1:      #060D1A;
+  --text-2:      #5A6E8A;
+  --text-3:      #A8B8CC;
+  --text-inv:    #FFFFFF;
+  --primary:     var(--blue);
+  --primary-dim: var(--blue-dim);
+  --primary-faint:var(--blue-faint);
+  --primary-glow: var(--blue-glow);
+  --dot-color:   rgba(26,75,219,.12);
+  --shadow-sm:   0 1px 3px rgba(0,0,0,.07);
+  --shadow-md:   0 4px 20px rgba(0,0,0,.09);
+  --shadow-lg:   0 12px 40px rgba(0,0,0,.11);
+  --shadow-card: 0 8px 32px rgba(26,75,219,.10), 0 0 0 1px rgba(26,75,219,.15);
+  --overlay:     rgba(0,0,0,.45);
+  color-scheme: light;
+}
+
+[data-theme="dark"] {
+  --bg:          #060D1A;
+  --bg-2:        #0A1525;
+  --bg-3:        #0E1D33;
+  --bg-4:        #132440;
+  --bg-raised:   #0C1830;
+  --border:      rgba(255,255,255,.07);
+  --border-mid:  rgba(255,255,255,.12);
+  --border-hi:   rgba(255,255,255,.22);
+  --text-1:      #EDF2FF;
+  --text-2:      #7A95B8;
+  --text-3:      #2E4D6A;
+  --text-inv:    #060D1A;
+  --primary:     var(--mint);
+  --primary-dim: var(--mint-dim);
+  --primary-faint:var(--mint-faint);
+  --primary-glow: var(--mint-glow);
+  --dot-color:   rgba(0,229,176,.10);
+  --shadow-sm:   0 1px 3px rgba(0,0,0,.5);
+  --shadow-md:   0 4px 20px rgba(0,0,0,.6);
+  --shadow-lg:   0 12px 40px rgba(0,0,0,.7);
+  --shadow-card: 0 8px 32px rgba(0,0,0,.5), 0 0 0 1px rgba(0,229,176,.18);
+  --overlay:     rgba(6,13,26,.92);
+  /* Success shifts to warm lime in dark — clearly distinct from brand mint. */
+  --success:       #4ADE80;
+  --success-faint: rgba(74,222,128,.10);
+  color-scheme: dark;
+}

@@ -1,0 +1,129 @@
+/* Plexa One v5 — reset and canvas. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.6;
+  background: var(--bg);
+  color: var(--text-1);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background var(--t-slow), color var(--t-slow);
+  min-height: 100vh;
+}
+
+/* Dot matrix canvas */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background-image: radial-gradient(circle, var(--dot-color) 1px, transparent 1px);
+  background-size: 24px 24px;
+  pointer-events: none;
+  z-index: 0;
+  transition: background-image var(--t-slow);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-mid);
+  border-radius: 9px;
+}
+
+::selection {
+  background: var(--primary-faint);
+  color: var(--primary);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+code {
+  font-family: var(--font-mono);
+  font-size: 0.82em;
+  background: var(--bg-3);
+  color: var(--primary);
+  padding: 2px 7px;
+  border-radius: var(--r-xs);
+}
+
+/*
+ * Staggered scroll reveal. Driven by data-visible, not a class — React rewrites
+ * className on these elements when a layout class changes, which would wipe an
+ * imperatively added class and leave the block invisible but still clickable.
+ */
+.reveal {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 0.55s ease, transform 0.55s ease;
+}
+.reveal[data-visible] {
+  opacity: 1;
+  transform: none;
+}
+.reveal-child {
+  opacity: 0;
+  transform: translateY(14px);
+  transition: opacity 0.5s ease, transform 0.5s ease;
+}
+.reveal-child[data-visible] {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal,
+  .reveal-child {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
+
+/* A visibility effect must never be able to hide content outright. */
+@media (scripting: none) {
+  .reveal,
+  .reveal-child {
+    opacity: 1;
+    transform: none;
+  }
+}
